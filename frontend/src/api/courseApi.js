@@ -68,3 +68,34 @@ export function getAttributeValues(attributeQueryRequest) {
   return api.post('/courses/attribute-values', attributeQueryRequest)
 }
 
+/**
+ * 学生选课
+ * @param {Object} enrollmentRequest - 选课请求对象
+ * @param {Number} enrollmentRequest.studentId - 学生ID
+ * @param {Number} enrollmentRequest.courseId - 课程ID
+ * @returns {Promise<Object>} 选课响应对象 { success, message, warn, enrollmentId }
+ */
+export function enrollCourse(enrollmentRequest) {
+  return api.post('/enrollments/enroll', enrollmentRequest)
+}
+
+/**
+ * 学生退课
+ * @param {Object} dropRequest - 退课请求对象
+ * @param {Number} dropRequest.studentId - 学生ID
+ * @param {Number} dropRequest.courseId - 课程ID
+ * @returns {Promise<Object>} 退课响应对象 { success, message, warn, enrollmentId }
+ */
+export function dropCourse(dropRequest) {
+  return api.post('/enrollments/drop', dropRequest)
+}
+
+/**
+ * 查询学生当前已选的所有课程
+ * @param {Number} studentId - 学生ID
+ * @returns {Promise<Array>} 学生已选的课程列表（包含节次信息）
+ */
+export function getStudentCourses(studentId) {
+  return api.get(`/enrollments/student/${studentId}`)
+}
+

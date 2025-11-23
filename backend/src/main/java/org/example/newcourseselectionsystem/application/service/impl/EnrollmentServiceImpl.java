@@ -2,7 +2,10 @@ package org.example.newcourseselectionsystem.application.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.example.newcourseselectionsystem.application.dto.CourseSessionDTO;
+import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDTO;
 import org.example.newcourseselectionsystem.application.dto.EnrollmentResponse;
+import org.example.newcourseselectionsystem.application.request.DropCourseRequest;
 import org.example.newcourseselectionsystem.application.request.EnrollmentRequest;
 import org.example.newcourseselectionsystem.application.service.EnrollmentService;
 import org.example.newcourseselectionsystem.domain.entity.Course;
@@ -13,12 +16,16 @@ import org.example.newcourseselectionsystem.infrastructure.mapper.CourseMapper;
 import org.example.newcourseselectionsystem.infrastructure.mapper.CourseSessionMapper;
 import org.example.newcourseselectionsystem.infrastructure.mapper.EnrollmentMapper;
 import org.example.newcourseselectionsystem.infrastructure.mapper.StudentMapper;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -157,6 +164,142 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         }
 
         return null;
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.REPEATABLE_READ, rollbackFor = Exception.class)
+    public EnrollmentResponse dropCourse(DropCourseRequest request) {
+        Long studentId = request.getStudentId();
+        Long courseId = request.getCourseId();
+
+        // 1. 学生身份验证
+        Student student = studentMapper.selectById(studentId);
+        if (student == null) {
+            return EnrollmentResponse.builder()
+                    .success(false)
+                    .message("学生不存在或状态异常")
+                    .build();
+        }
+
+        // 2. 课程存在性验证
+        Course course = courseMapper.selectById(courseId);
+        if (course == null) {
+            return EnrollmentResponse.builder()
+                    .success(false)
+                    .message("课程不存在")
+                    .build();
+        }
+
+        // 3. 查询选课记录（必须存在且状态为"已选"）
+        LambdaQueryWrapper<Enrollment> enrollmentWrapper = new LambdaQueryWrapper<>();
+        enrollmentWrapper.eq(Enrollment::getStudentId, studentId)
+                .eq(Enrollment::getCourseId, courseId)
+                .eq(Enrollment::getStatus, "已选");
+        Enrollment enrollment = enrollmentMapper.selectOne(enrollmentWrapper);
+        
+        if (enrollment == null) {
+            return EnrollmentResponse.builder()
+                    .success(false)
+                    .message("您尚未选择该课程或该课程已退选")
+                    .build();
+        }
+
+        // 4. 更新选课记录状态为"已退选"
+        enrollment.setStatus("已退选");
+        enrollmentMapper.updateById(enrollment);
+
+        // 5. 更新课程的已选人数（减1，确保不会小于0）
+        Integer enrolledCount = course.getEnrolledCount() != null ? course.getEnrolledCount() : 0;
+        if (enrolledCount > 0) {
+            course.setEnrolledCount(enrolledCount - 1);
+            courseMapper.updateById(course);
+        }
+
+        return EnrollmentResponse.builder()
+                .success(true)
+                .message("退课成功")
+                .warn(null)
+                .enrollmentId(enrollment.getEnrollmentId())
+                .build();
+    }
+
+    @Override
+    public List<CourseWithSessionsDTO> getStudentCourses(Long studentId) {
+        if (studentId == null) {
+            return Collections.emptyList();
+        }
+
+        // 1. 查询学生所有状态为"已选"的选课记录
+        LambdaQueryWrapper<Enrollment> enrollmentWrapper = new LambdaQueryWrapper<>();
+        enrollmentWrapper.eq(Enrollment::getStudentId, studentId)
+                .eq(Enrollment::getStatus, "已选");
+        List<Enrollment> enrollments = enrollmentMapper.selectList(enrollmentWrapper);
+
+        if (CollectionUtils.isEmpty(enrollments)) {
+            return Collections.emptyList();
+        }
+
+        // 2. 获取课程ID列表
+        List<Long> courseIds = enrollments.stream()
+                .map(Enrollment::getCourseId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 3. 查询课程信息
+        List<Course> courses = courseMapper.selectList(
+                new LambdaQueryWrapper<Course>().in(Course::getCourseId, courseIds));
+
+        if (CollectionUtils.isEmpty(courses)) {
+            return Collections.emptyList();
+        }
+
+        // 4. 加载节次信息
+        Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
+
+        // 5. 组装返回结果
+        return courses.stream()
+                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 加载课程的节次信息
+     */
+    private Map<Long, List<CourseSessionDTO>> loadSessions(List<Long> courseIds) {
+        if (CollectionUtils.isEmpty(courseIds)) {
+            return Collections.emptyMap();
+        }
+        // 一次性批量加载节次信息，避免 N+1 查询
+        return courseSessionMapper.selectList(
+                new LambdaQueryWrapper<CourseSession>().in(CourseSession::getCourseId, courseIds)).stream()
+                .collect(Collectors.groupingBy(
+                        CourseSession::getCourseId,
+                        Collectors.mapping(this::convertSession, Collectors.toList())));
+    }
+
+    /**
+     * 转换节次实体为DTO
+     */
+    private CourseSessionDTO convertSession(CourseSession session) {
+        CourseSessionDTO dto = new CourseSessionDTO();
+        dto.setSessionId(session.getSessionId());
+        dto.setWeekday(session.getWeekday());
+        dto.setStartPeriod(session.getStartPeriod());
+        dto.setEndPeriod(session.getEndPeriod());
+        return dto;
+    }
+
+    /**
+     * 组装课程DTO
+     */
+    private CourseWithSessionsDTO assembleCourseDTO(Course course, List<CourseSessionDTO> sessions,
+            Integer enrolledCount) {
+        CourseWithSessionsDTO dto = new CourseWithSessionsDTO();
+        BeanUtils.copyProperties(course, dto);
+        dto.setSessions(sessions == null ? Collections.emptyList() : sessions);
+        dto.setEnrolledCount(enrolledCount);
+        return dto;
     }
 }
 

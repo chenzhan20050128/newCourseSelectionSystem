@@ -79,6 +79,31 @@
             </li>
           </ul>
         </div>
+        <div v-if="operationMessage[course.courseId]" 
+             :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
+          {{ operationMessage[course.courseId].message }}
+        </div>
+        <div class="course-actions">
+          <p class="capacity-info">
+            <strong>容量:</strong> {{ course.enrolledCount || 0 }}/{{ course.capacity }}
+          </p>
+          <div class="action-buttons">
+            <button 
+              class="btn-enroll"
+              @click="handleEnroll(course)"
+              :disabled="!studentId || enrollingCourses.has(course.courseId)"
+            >
+              {{ enrollingCourses.has(course.courseId) ? '选课中...' : '选课' }}
+            </button>
+            <button 
+              class="btn-drop"
+              @click="handleDrop(course)"
+              :disabled="!studentId || droppingCourses.has(course.courseId)"
+            >
+              {{ droppingCourses.has(course.courseId) ? '退课中...' : '退课' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -89,12 +114,15 @@
 </template>
 
 <script>
-import { ref, reactive, computed } from 'vue'
-import { searchCoursesBySession } from '../api/courseApi'
+import { ref, reactive, computed, inject } from 'vue'
+import { searchCoursesBySession, enrollCourse, dropCourse } from '../api/courseApi'
 
 export default {
   name: 'SessionSearch',
   setup() {
+    // 获取学生ID
+    const studentId = inject('studentId')
+    
     const query = reactive({
       weekday: '',
       startPeriod: null,
@@ -105,6 +133,11 @@ export default {
     const loading = ref(false)
     const error = ref('')
     const searched = ref(false)
+    
+    // 选课/退课相关状态
+    const enrollingCourses = ref(new Set()) // 正在选课的课程ID集合
+    const droppingCourses = ref(new Set()) // 正在退课的课程ID集合
+    const operationMessage = ref({}) // 每个课程的操作消息 { courseId: { type: 'success'|'error'|'warning', message: '' } }
 
     const isFormValid = computed(() => {
       return query.weekday && 
@@ -149,17 +182,116 @@ export default {
       results.value = []
       error.value = ''
       searched.value = false
+      operationMessage.value = {}
+    }
+
+    /**
+     * 处理选课
+     */
+    const handleEnroll = async (course) => {
+      if (!studentId.value) {
+        setOperationMessage(course.courseId, 'error', '请先输入学生ID')
+        return
+      }
+
+      enrollingCourses.value.add(course.courseId)
+      clearOperationMessage(course.courseId)
+
+      try {
+        const response = await enrollCourse({
+          studentId: studentId.value,
+          courseId: course.courseId
+        })
+
+        if (response.success) {
+          setOperationMessage(course.courseId, 'success', response.message)
+          if (response.warn) {
+            // 如果有警告信息，也显示出来
+            setTimeout(() => {
+              setOperationMessage(course.courseId, 'warning', response.warn)
+            }, 2000)
+          }
+          // 更新课程的已选人数
+          course.enrolledCount = (course.enrolledCount || 0) + 1
+        } else {
+          setOperationMessage(course.courseId, 'error', response.message)
+        }
+      } catch (err) {
+        setOperationMessage(course.courseId, 'error', err.message || '选课失败')
+        console.error('Enroll error:', err)
+      } finally {
+        enrollingCourses.value.delete(course.courseId)
+      }
+    }
+
+    /**
+     * 处理退课
+     */
+    const handleDrop = async (course) => {
+      if (!studentId.value) {
+        setOperationMessage(course.courseId, 'error', '请先输入学生ID')
+        return
+      }
+
+      droppingCourses.value.add(course.courseId)
+      clearOperationMessage(course.courseId)
+
+      try {
+        const response = await dropCourse({
+          studentId: studentId.value,
+          courseId: course.courseId
+        })
+
+        if (response.success) {
+          setOperationMessage(course.courseId, 'success', response.message)
+          // 更新课程的已选人数
+          course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
+        } else {
+          setOperationMessage(course.courseId, 'error', response.message)
+        }
+      } catch (err) {
+        setOperationMessage(course.courseId, 'error', err.message || '退课失败')
+        console.error('Drop error:', err)
+      } finally {
+        droppingCourses.value.delete(course.courseId)
+      }
+    }
+
+    /**
+     * 设置操作消息
+     */
+    const setOperationMessage = (courseId, type, message) => {
+      operationMessage.value[courseId] = { type, message }
+      // 5秒后自动清除消息
+      setTimeout(() => {
+        clearOperationMessage(courseId)
+      }, 5000)
+    }
+
+    /**
+     * 清除操作消息
+     */
+    const clearOperationMessage = (courseId) => {
+      if (operationMessage.value[courseId]) {
+        delete operationMessage.value[courseId]
+      }
     }
 
     return {
+      studentId,
       query,
       results,
       loading,
       error,
       searched,
       isFormValid,
+      enrollingCourses,
+      droppingCourses,
+      operationMessage,
       handleSearch,
-      handleReset
+      handleReset,
+      handleEnroll,
+      handleDrop
     }
   }
 }
@@ -343,6 +475,101 @@ h2 {
   text-align: center;
   padding: 40px;
   color: #999;
+}
+
+.course-actions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.capacity-info {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-enroll,
+.btn-drop {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.btn-enroll {
+  background: #52c41a;
+  color: white;
+}
+
+.btn-enroll:hover:not(:disabled) {
+  background: #73d13d;
+}
+
+.btn-enroll:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-drop {
+  background: #ff4d4f;
+  color: white;
+}
+
+.btn-drop:hover:not(:disabled) {
+  background: #ff7875;
+}
+
+.btn-drop:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.operation-message {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  animation: fadeIn 0.3s;
+}
+
+.message-success {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #52c41a;
+}
+
+.message-error {
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  color: #ff4d4f;
+}
+
+.message-warning {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  color: #faad14;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
 

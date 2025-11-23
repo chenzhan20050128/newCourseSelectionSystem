@@ -2,6 +2,18 @@
   <div class="app-container">
     <h1>课程查询系统 - 测试前端</h1>
     
+    <div class="student-info">
+      <label for="studentId">学生ID:</label>
+      <input 
+        id="studentId"
+        type="number" 
+        v-model.number="studentId" 
+        placeholder="请输入学生ID"
+        min="1"
+      />
+      <span v-if="studentId" class="student-id-display">当前学生: {{ studentId }}</span>
+    </div>
+    
     <div class="tabs">
       <button 
         :class="['tab', { active: activeTab === 'course' }]"
@@ -15,31 +27,45 @@
       >
         节次查询
       </button>
+      <button 
+        :class="['tab', { active: activeTab === 'myCourses' }]"
+        @click="activeTab = 'myCourses'"
+      >
+        我的课程
+      </button>
     </div>
 
     <div class="content">
       <CourseSearch v-if="activeTab === 'course'" />
       <SessionSearch v-if="activeTab === 'session'" />
+      <MyCourses v-if="activeTab === 'myCourses'" />
     </div>
   </div>
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, provide } from 'vue'
 import CourseSearch from './components/CourseSearch.vue'
 import SessionSearch from './components/SessionSearch.vue'
+import MyCourses from './components/MyCourses.vue'
 
 export default {
   name: 'App',
   components: {
     CourseSearch,
-    SessionSearch
+    SessionSearch,
+    MyCourses
   },
   setup() {
     const activeTab = ref('course')
+    const studentId = ref(null)
+    
+    // 使用 provide 向子组件提供 studentId
+    provide('studentId', studentId)
     
     return {
-      activeTab
+      activeTab,
+      studentId
     }
   }
 }
@@ -98,6 +124,41 @@ h1 {
 .tab.active {
   color: #1890ff;
   border-bottom-color: #1890ff;
+}
+
+.student-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f0f7ff;
+  border-radius: 4px;
+  border: 1px solid #d4e8ff;
+}
+
+.student-info label {
+  font-weight: bold;
+  color: #333;
+}
+
+.student-info input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 200px;
+}
+
+.student-info input:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+.student-id-display {
+  color: #1890ff;
+  font-weight: bold;
+  margin-left: 10px;
 }
 
 .content {
