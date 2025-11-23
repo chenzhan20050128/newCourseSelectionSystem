@@ -99,3 +99,115 @@ export function getStudentCourses(studentId) {
   return api.get(`/enrollments/student/${studentId}`)
 }
 
+/**
+ * 获取智能课程推荐（流式响应）
+ * @param {Object} request - 推荐请求对象
+ * @param {Number} request.studentId - 学生ID
+ * @param {String} request.prompt - 用户输入的推荐请求文本
+ * @param {Function} onMessage - 接收到消息时的回调函数 (content: string) => void
+ * @param {Function} onError - 错误回调函数 (error: Error) => void
+ * @param {Function} onComplete - 完成回调函数 () => void
+ * @returns {Function} 取消函数，调用可取消请求
+ */
+export function getCourseRecommendationStream(request, onMessage, onError, onComplete) {
+  const url = '/api/recommendations/recommend'
+  let cancelled = false
+  let reader = null
+  
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request)
+  })
+  .then(async response => {
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(errorText || `HTTP error! status: ${response.status}`)
+    }
+    
+    reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    
+    try {
+      while (true) {
+        if (cancelled) {
+          await reader.cancel()
+          break
+        }
+        
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          // 处理缓冲区中剩余的数据
+          if (buffer.trim()) {
+            const lines = buffer.split('\n')
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.substring(6).trim()
+                if (data && data !== '[DONE]' && onMessage) {
+                  onMessage(data)
+                }
+              }
+            }
+          }
+          if (onComplete) onComplete()
+          break
+        }
+        
+        // 解码数据
+        buffer += decoder.decode(value, { stream: true })
+        
+        // 处理 SSE 格式的数据（按双换行符分割事件）
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || '' // 保留最后一个不完整的事件
+        
+        for (const event of events) {
+          if (cancelled) break
+          
+          const lines = event.split('\n')
+          let eventData = ''
+          let eventType = 'message'
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              eventData = line.substring(6).trim()
+            } else if (line.startsWith('event: ')) {
+              eventType = line.substring(7).trim()
+            }
+          }
+          
+          if (eventData) {
+            if (eventType === 'error') {
+              if (onError) {
+                onError(new Error(eventData))
+              }
+            } else if (eventData !== '[DONE]') {
+              if (onMessage) onMessage(eventData)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (!cancelled && onError) {
+        onError(err)
+      }
+    }
+  })
+  .catch(error => {
+    if (!cancelled && onError) {
+      onError(error)
+    }
+  })
+  
+  // 返回取消函数
+  return () => {
+    cancelled = true
+    if (reader) {
+      reader.cancel().catch(() => {})
+    }
+  }
+}
+

@@ -33,12 +33,19 @@
       >
         我的课程
       </button>
+      <button 
+        :class="['tab', { active: activeTab === 'smartSelection' }]"
+        @click="activeTab = 'smartSelection'"
+      >
+        智能选课
+      </button>
     </div>
 
     <div class="content">
       <CourseSearch v-if="activeTab === 'course'" />
       <SessionSearch v-if="activeTab === 'session'" />
       <MyCourses v-if="activeTab === 'myCourses'" />
+      <SmartCourseSelection v-if="activeTab === 'smartSelection'" />
     </div>
   </div>
 </template>
@@ -48,13 +55,15 @@ import { ref, provide } from 'vue'
 import CourseSearch from './components/CourseSearch.vue'
 import SessionSearch from './components/SessionSearch.vue'
 import MyCourses from './components/MyCourses.vue'
+import SmartCourseSelection from './components/SmartCourseSelection.vue'
 
 export default {
   name: 'App',
   components: {
     CourseSearch,
     SessionSearch,
-    MyCourses
+    MyCourses,
+    SmartCourseSelection
   },
   setup() {
     const activeTab = ref('course')
