@@ -2,6 +2,7 @@ package org.example.newcourseselectionsystem.interfaces;
 
 import lombok.RequiredArgsConstructor;
 import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDTO;
+import org.example.newcourseselectionsystem.application.request.CourseAttributeQueryRequest;
 import org.example.newcourseselectionsystem.application.request.CourseQueryRequest;
 import org.example.newcourseselectionsystem.application.request.SessionQueryRequest;
 import org.example.newcourseselectionsystem.application.service.CourseService;
@@ -34,10 +35,19 @@ public class CourseController {
     }
 
     /**
-     * 根据节次条件倒查所有课程ID
+     * 根据节次条件倒查所有课程，返回携带节次信息的完整课程信息
      */
     @PostMapping("/search-by-session")
-    public List<Long> searchCourseIdsBySession(@Valid @RequestBody SessionQueryRequest request) {
-        return courseService.listCourseIdsBySession(request);
+    public List<CourseWithSessionsDTO> searchCoursesBySession(@Valid @RequestBody SessionQueryRequest request) {
+        return courseService.listCoursesBySession(request);
+    }
+
+    /**
+     * 根据条件筛选课程，返回指定属性的所有唯一值集合
+     * 例如：查询所有教师为刘钦且classroom为A101的课程的campus集合
+     */
+    @PostMapping("/attribute-values")
+    public List<Object> getAttributeValues(@Valid @RequestBody CourseAttributeQueryRequest request) {
+        return courseService.getAttributeValues(request);
     }
 }

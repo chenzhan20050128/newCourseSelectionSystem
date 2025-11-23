@@ -33,7 +33,8 @@ CREATE TABLE courses (
     classroom     VARCHAR(64) NOT NULL,
     start_week    INT NOT NULL,
     end_week      INT NOT NULL,
-    CONSTRAINT fk_course_instructor FOREIGN KEY (instructor_id) REFERENCES instructors (instructor_id)
+    capacity      INT NOT NULL COMMENT '课程容量，与enrolled_count（已选人数）一起用于判断课程是否已满',
+    enrolled_count INT NOT NULL DEFAULT 0 COMMENT '已选人数，与capacity（课程容量）一起用于判断课程是否已满'
 );
 
 CREATE TABLE course_sessions (
@@ -41,8 +42,7 @@ CREATE TABLE course_sessions (
     course_id     BIGINT NOT NULL,
     weekday       VARCHAR(16) NOT NULL,
     start_period  INT NOT NULL,
-    end_period    INT NOT NULL,
-    CONSTRAINT fk_session_course FOREIGN KEY (course_id) REFERENCES courses (course_id)
+    end_period    INT NOT NULL
 );
 
 CREATE TABLE enrollments (
@@ -51,8 +51,6 @@ CREATE TABLE enrollments (
     course_id     BIGINT NOT NULL,
     enrolled_at   DATETIME NOT NULL,
     final_grade   DECIMAL(5,2),
-    status        VARCHAR(16) NOT NULL,
-    CONSTRAINT fk_enrollment_student FOREIGN KEY (student_id) REFERENCES students (student_id),
-    CONSTRAINT fk_enrollment_course FOREIGN KEY (course_id) REFERENCES courses (course_id)
+    status        VARCHAR(16) NOT NULL COMMENT '选课状态，如"已选"、"已退选"等'
 );
 

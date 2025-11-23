@@ -37,18 +37,30 @@ class CourseServiceTest {
     }
 
     @Test
-    void shouldQueryCourseIdsBySession() {
+    void shouldQueryCoursesBySession() {
         SessionQueryRequest request = new SessionQueryRequest();
         request.setWeekday("周三");
         request.setStartPeriod(5);
         request.setEndPeriod(5);
 
-        List<Long> ids = courseService.listCourseIdsBySession(request);
+        List<CourseWithSessionsDTO> courses = courseService.listCoursesBySession(request);
 
-        Assertions.assertFalse(ids.isEmpty(), "周三第5节应当有课程");
-        List<Long> expected = ids.stream().sorted().collect(Collectors.toList());
-        Assertions.assertTrue(expected.contains(1L), "数据结构应当匹配");
-        Assertions.assertTrue(expected.contains(2L), "高等数学应当匹配");
-        Assertions.assertTrue(expected.contains(4L), "通信原理应当匹配");
+        Assertions.assertFalse(courses.isEmpty(), "周三第5节应当有课程");
+        List<Long> courseIds = courses.stream()
+                .map(CourseWithSessionsDTO::getCourseId)
+                .sorted()
+                .collect(Collectors.toList());
+        Assertions.assertTrue(courseIds.contains(1L), "数据结构应当匹配");
+        Assertions.assertTrue(courseIds.contains(2L), "高等数学应当匹配");
+        Assertions.assertTrue(courseIds.contains(4L), "通信原理应当匹配");
+        
+        // 验证返回的课程包含完整信息和节次
+        CourseWithSessionsDTO course = courses.stream()
+                .filter(c -> c.getCourseId().equals(1L))
+                .findFirst()
+                .orElse(null);
+        Assertions.assertNotNull(course, "应当包含数据结构课程");
+        Assertions.assertNotNull(course.getCourseName(), "课程名称不应为空");
+        Assertions.assertFalse(course.getSessions().isEmpty(), "课程应附带节次信息");
     }
 }

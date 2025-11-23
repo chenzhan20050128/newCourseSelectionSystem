@@ -27,5 +27,7 @@ public class CourseQueryRequest {
     private Integer startWeek;
 
     private Integer endWeek;
+
+    private Integer capacity;
 }
 

@@ -30,5 +30,9 @@ public class CourseWithSessionsDTO {
 
     private Integer endWeek;
 
+    private Integer capacity;
+
+    private Integer enrolledCount;
+
     private List<CourseSessionDTO> sessions;
 }

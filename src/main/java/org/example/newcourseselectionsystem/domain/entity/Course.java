@@ -32,4 +32,8 @@ public class Course {
     private Integer startWeek;
 
     private Integer endWeek;
+
+    private Integer capacity;
+
+    private Integer enrolledCount;
 }
