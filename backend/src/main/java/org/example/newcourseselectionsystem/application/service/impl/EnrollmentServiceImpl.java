@@ -64,16 +64,17 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                     .build();
         }
 
-        // 3. 重复选课检查
+        // 3. 重复选课检查（在同一轮次内）
         LambdaQueryWrapper<Enrollment> enrollmentWrapper = new LambdaQueryWrapper<>();
         enrollmentWrapper.eq(Enrollment::getStudentId, studentId)
                 .eq(Enrollment::getCourseId, courseId)
+                .eq(Enrollment::getBatchId, request.getBatchId())
                 .eq(Enrollment::getStatus, "已选");
         Enrollment existingEnrollment = enrollmentMapper.selectOne(enrollmentWrapper);
         if (existingEnrollment != null) {
             return EnrollmentResponse.builder()
                     .success(false)
-                    .message("您已经选择过该课程")
+                    .message("您在当前轮次已经选择过该课程")
                     .build();
         }
 
@@ -94,6 +95,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         Enrollment enrollment = new Enrollment();
         enrollment.setStudentId(studentId);
         enrollment.setCourseId(courseId);
+        enrollment.setBatchId(request.getBatchId());
         enrollment.setStatus("已选");
         enrollment.setEnrolledAt(LocalDateTime.now());
         enrollmentMapper.insert(enrollment);

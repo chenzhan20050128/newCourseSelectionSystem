@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @TableName("students")
 public class Student {
 
-    @TableId(value = "student_id", type = IdType.AUTO)
+    @TableId(value = "student_id", type = IdType.INPUT)
     private Long studentId;
 
     private String studentName;
@@ -22,8 +22,6 @@ public class Student {
     private LocalDate birthDate;
 
     private String college;
-
-    private String phone;
 
     private String password;
 }

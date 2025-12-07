@@ -23,6 +23,8 @@ public class Enrollment {
 
     private Long courseId;
 
+    private Long batchId;
+
     @TableField("enrolled_at")
     private LocalDateTime enrolledAt;
 

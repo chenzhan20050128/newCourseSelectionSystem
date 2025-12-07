@@ -21,5 +21,10 @@ public class EnrollmentRequest {
      */
     @NotNull(message = "课程ID不能为空")
     private Long courseId;
-}
 
+    /**
+     * 选课轮次ID
+     */
+    @NotNull(message = "选课轮次ID不能为空")
+    private Long batchId;
+}

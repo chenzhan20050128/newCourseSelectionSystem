@@ -1,0 +1,663 @@
+<template>
+  <div class="home-container">
+    <div class="header">
+      <div class="header-left">
+        <img src="../assets/校标-白底.png" alt="校徽" class="school-logo">
+        <h1>课程选课系统</h1>
+      </div>
+      
+      <!-- 选课轮次信息 - 移到header中间 -->
+      <div class="batch-info-header" v-if="selectedBatch">
+        <div class="batch-summary" @click="toggleBatchDetails">
+          <span class="batch-name">{{ selectedBatch.batchName }} - {{ selectedBatch.roundName }}</span>
+          <span :class="['batch-status', statusClass]">{{ selectedBatch.status }}</span>
+          <span class="dropdown-icon">{{ showBatchDetails ? '▲' : '▼' }}</span>
+        </div>
+        <button @click="showBatchSelector = true" class="change-batch-btn-header">切换</button>
+        
+        <!-- 下拉详细信息 -->
+        <div class="batch-details-dropdown" v-show="showBatchDetails">
+          <div class="detail-item">
+            <span class="detail-label">⏰ 选课时间:</span>
+            <span class="detail-value">{{ formatDateTime(selectedBatch.startTime) }} ~ {{ formatDateTime(selectedBatch.endTime) }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">📝 选课方式:</span>
+            <span class="detail-value">{{ selectedBatch.selectionMode }}</span>
+          </div>
+          <div class="detail-item" v-if="timeRemaining">
+            <span class="detail-label">⏳ 剩余时间:</span>
+            <span class="detail-value countdown">{{ timeRemaining }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="user-info">
+        <span class="welcome">欢迎, {{ user?.username }} {{ user?.userId }}</span>
+        <button @click="handleLogout" class="logout-btn">退出登录</button>
+      </div>
+    </div>
+
+    <!-- 轮次选择弹窗 -->
+    <div class="modal-overlay" v-if="showBatchSelector" @click="showBatchSelector = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>选择选课轮次</h3>
+          <button @click="showBatchSelector = false" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div 
+            v-for="batch in availableBatches" 
+            :key="batch.batchId"
+            :class="['batch-option', { selected: selectedBatch?.batchId === batch.batchId }]"
+            @click="selectBatch(batch)"
+          >
+            <div class="batch-option-header">
+              <span class="batch-option-name">{{ batch.batchName }} - {{ batch.roundName }}</span>
+              <span :class="['batch-option-status', getStatusClass(batch.status)]">{{ batch.status }}</span>
+            </div>
+            <div class="batch-option-time">{{ formatDateTime(batch.startTime) }} ~ {{ formatDateTime(batch.endTime) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="tabs">
+      <button 
+        :class="['tab', { active: activeTab === 'course' }]"
+        @click="activeTab = 'course'"
+      >
+        课程查询
+      </button>
+      <button 
+        :class="['tab', { active: activeTab === 'session' }]"
+        @click="activeTab = 'session'"
+      >
+        节次查询
+      </button>
+      <button 
+        v-if="user?.userType === 'student'"
+        :class="['tab', { active: activeTab === 'myCourses' }]"
+        @click="activeTab = 'myCourses'"
+      >
+        我的课程
+      </button>
+      <button 
+        v-if="user?.userType === 'student'"
+        :class="['tab', { active: activeTab === 'smartSelection' }]"
+        @click="activeTab = 'smartSelection'"
+      >
+        智能选课
+      </button>
+    </div>
+
+    <div class="content">
+      <CourseSearch v-if="activeTab === 'course'" />
+      <SessionSearch v-if="activeTab === 'session'" />
+      <MyCourses v-if="activeTab === 'myCourses' && user?.userType === 'student'" />
+      <SmartCourseSelection v-if="activeTab === 'smartSelection' && user?.userType === 'student'" />
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, provide, computed, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
+import CourseSearch from '../components/CourseSearch.vue';
+import SessionSearch from '../components/SessionSearch.vue';
+import MyCourses from '../components/MyCourses.vue';
+import SmartCourseSelection from '../components/SmartCourseSelection.vue';
+import { logout } from '../api/authApi';
+import { getAllBatches } from '../api/electiveBatchApi';
+
+export default {
+  name: 'Home',
+  components: {
+    CourseSearch,
+    SessionSearch,
+    MyCourses,
+    SmartCourseSelection
+  },
+  setup() {
+    const router = useRouter();
+    const activeTab = ref('course');
+    const user = ref(null);
+    const selectedBatch = ref(null);
+    const availableBatches = ref([]);
+    const showBatchSelector = ref(false);
+    const showBatchDetails = ref(false);
+    const timeRemaining = ref('');
+    let countdownTimer = null;
+    
+    // 切换详细信息显示
+    const toggleBatchDetails = () => {
+      showBatchDetails.value = !showBatchDetails.value;
+    };
+    
+    // 从 localStorage 获取用户信息和选课轮次
+    onMounted(() => {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        user.value = JSON.parse(userStr);
+      } else {
+        // 如果没有用户信息，跳转到登录页
+        router.push('/login');
+        return;
+      }
+
+      // 获取选中的选课轮次
+      const batchStr = localStorage.getItem('selectedBatch');
+      if (batchStr) {
+        selectedBatch.value = JSON.parse(batchStr);
+        startCountdown();
+      }
+
+      // 加载所有可用轮次
+      loadAvailableBatches();
+    });
+
+    // 清除定时器
+    onBeforeUnmount(() => {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+      }
+    });
+    
+    const userTypeText = computed(() => {
+      return user.value?.userType === 'student' ? '学生' : '教师';
+    });
+
+    // 轮次状态样式
+    const statusClass = computed(() => {
+      if (!selectedBatch.value) return '';
+      return getStatusClass(selectedBatch.value.status);
+    });
+
+    const getStatusClass = (status) => {
+      if (status === '进行中') return 'status-active';
+      if (status === '未开始') return 'status-pending';
+      return 'status-ended';
+    };
+    
+    // 提供 studentId 给子组件
+    const studentId = computed(() => user.value?.userId);
+    provide('studentId', studentId);
+
+    // 加载可用轮次
+    const loadAvailableBatches = async () => {
+      try {
+        const response = await getAllBatches();
+        availableBatches.value = response.data.filter(
+          batch => batch.status === '进行中' || batch.status === '未开始'
+        );
+      } catch (error) {
+        console.error('加载选课轮次失败:', error);
+      }
+    };
+
+    // 选择轮次
+    const selectBatch = (batch) => {
+      selectedBatch.value = batch;
+      localStorage.setItem('selectedBatch', JSON.stringify(batch));
+      localStorage.setItem('selectedBatchId', batch.batchId);
+      showBatchSelector.value = false;
+      startCountdown();
+    };
+
+    // 格式化日期时间
+    const formatDateTime = (dateTimeStr) => {
+      if (!dateTimeStr) return '';
+      const date = new Date(dateTimeStr);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    };
+
+    // 开始倒计时
+    const startCountdown = () => {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+      }
+
+      const updateCountdown = () => {
+        if (!selectedBatch.value) {
+          timeRemaining.value = '';
+          return;
+        }
+
+        const now = new Date().getTime();
+        const startTime = new Date(selectedBatch.value.startTime).getTime();
+        const endTime = new Date(selectedBatch.value.endTime).getTime();
+
+        // 如果还未开始，显示距离开始的时间
+        if (now < startTime) {
+          const diff = startTime - now;
+          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+          if (days > 0) {
+            timeRemaining.value = `距离开始: ${days}天 ${hours}小时 ${minutes}分钟`;
+          } else if (hours > 0) {
+            timeRemaining.value = `距离开始: ${hours}小时 ${minutes}分钟 ${seconds}秒`;
+          } else {
+            timeRemaining.value = `距离开始: ${minutes}分钟 ${seconds}秒`;
+          }
+          return;
+        }
+
+        // 如果已经开始，显示距离结束的时间
+        const diff = endTime - now;
+
+        if (diff <= 0) {
+          timeRemaining.value = '已结束';
+          if (countdownTimer) {
+            clearInterval(countdownTimer);
+          }
+          return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        if (days > 0) {
+          timeRemaining.value = `剩余时间: ${days}天 ${hours}小时 ${minutes}分钟`;
+        } else if (hours > 0) {
+          timeRemaining.value = `剩余时间: ${hours}小时 ${minutes}分钟 ${seconds}秒`;
+        } else {
+          timeRemaining.value = `剩余时间: ${minutes}分钟 ${seconds}秒`;
+        }
+      };
+
+      updateCountdown();
+      countdownTimer = setInterval(updateCountdown, 1000);
+    };
+    
+    const handleLogout = async () => {
+      try {
+        await logout();
+      } catch (error) {
+        console.error('登出错误:', error);
+      } finally {
+        // 清除本地存储
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('selectedBatch');
+        localStorage.removeItem('selectedBatchId');
+        // 跳转到登录页
+        router.push('/login');
+      }
+    };
+    
+    return {
+      activeTab,
+      user,
+      userTypeText,
+      selectedBatch,
+      availableBatches,
+      showBatchSelector,
+      showBatchDetails,
+      timeRemaining,
+      statusClass,
+      getStatusClass,
+      selectBatch,
+      formatDateTime,
+      handleLogout,
+      toggleBatchDetails
+    };
+  }
+};
+</script>
+
+<style scoped>
+.home-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-height: calc(100vh - 40px);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -20px -20px 20px -20px;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #7C1F89 0%, #5A1566 100%);
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.school-logo {
+  width: 45px;
+  height: 45px;
+  object-fit: contain;
+}
+
+.header h1 {
+  color: white;
+  font-size: 26px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.welcome {
+  color: white;
+  font-size: 14px;
+}
+
+.logout-btn {
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0;
+}
+
+.tab {
+  padding: 12px 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+  position: relative;
+  bottom: -2px;
+}
+
+.tab:hover {
+  color: #667eea;
+}
+
+.tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  font-weight: 600;
+}
+
+.content {
+  margin-top: 20px;
+}
+
+/* Header中的选课轮次信息样式 */
+.batch-info-header {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  min-width: 300px;
+}
+
+.batch-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 15px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  flex: 1;
+}
+
+.batch-summary:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.batch-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
+.batch-status {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-active {
+  background: #4caf50;
+  color: white;
+}
+
+.status-pending {
+  background: #ff9800;
+  color: white;
+}
+
+.status-ended {
+  background: #9e9e9e;
+  color: white;
+}
+
+.dropdown-icon {
+  color: white;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.change-batch-btn-header {
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.change-batch-btn-header:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.batch-details-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 10px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.detail-item:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #7C1F89;
+}
+
+.detail-value {
+  color: #555;
+}
+
+.countdown {
+  font-weight: 600;
+  color: #4caf50;
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.close-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-option {
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.batch-option:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.batch-option.selected {
+  border-color: #667eea;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+.batch-option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.batch-option-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 16px;
+}
+
+.batch-option-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.batch-option-time {
+  color: #666;
+  font-size: 14px;
+}
+</style>

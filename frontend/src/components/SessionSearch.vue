@@ -197,10 +197,19 @@ export default {
       enrollingCourses.value.add(course.courseId)
       clearOperationMessage(course.courseId)
 
+      // 获取当前选中的选课轮次ID
+      const batchId = localStorage.getItem('selectedBatchId')
+      if (!batchId) {
+        setOperationMessage(course.courseId, 'error', '请先选择选课轮次')
+        enrollingCourses.value.delete(course.courseId)
+        return
+      }
+
       try {
         const response = await enrollCourse({
           studentId: studentId.value,
-          courseId: course.courseId
+          courseId: course.courseId,
+          batchId: Number(batchId)
         })
 
         if (response.success) {
