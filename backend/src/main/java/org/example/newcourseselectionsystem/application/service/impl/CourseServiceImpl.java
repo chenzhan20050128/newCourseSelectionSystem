@@ -7,6 +7,7 @@ import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDT
 import org.example.newcourseselectionsystem.application.request.CourseAttributeQueryRequest;
 import org.example.newcourseselectionsystem.application.request.CourseQueryRequest;
 import org.example.newcourseselectionsystem.application.request.SessionQueryRequest;
+import org.example.newcourseselectionsystem.application.request.CombinedCourseQueryRequest;
 import org.example.newcourseselectionsystem.application.service.CourseService;
 import org.example.newcourseselectionsystem.domain.entity.Course;
 import org.example.newcourseselectionsystem.domain.entity.CourseSession;
@@ -18,15 +19,11 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 课程查询实现
+ * 课程查询实现（更新为按instructorName过滤）
  */
 @Service
 @RequiredArgsConstructor
@@ -36,22 +33,93 @@ public class CourseServiceImpl implements CourseService {
     private final CourseSessionMapper courseSessionMapper;
 
     @Override
+    public List<CourseWithSessionsDTO> searchCourses(CombinedCourseQueryRequest request) {
+        if (request == null) {
+            return Collections.emptyList();
+        }
+        CourseQueryRequest courseCond = request.getCourseCondition();
+        SessionQueryRequest sessionCond = request.getSessionCondition();
+
+        List<Long> candidateCourseIds = null;
+        List<Course> candidateCourses = Collections.emptyList();
+
+        // 1) 先处理课程字段条件（如果有）
+        if (courseCond != null) {
+            LambdaQueryWrapper<Course> courseWrapper = buildCourseWrapper(courseCond);
+            candidateCourses = courseMapper.selectList(courseWrapper);
+            if (CollectionUtils.isEmpty(candidateCourses)) {
+                return Collections.emptyList();
+            }
+            candidateCourseIds = candidateCourses.stream().map(Course::getCourseId).collect(Collectors.toList());
+        }
+
+        // 2) 再处理节次条件（如果有）
+        if (sessionCond != null) {
+            Integer start = sessionCond.getStartPeriod();
+            Integer end = sessionCond.getEndPeriod();
+            if (start != null && end != null && start > end) {
+                int tmp = start; start = end; end = tmp;
+            }
+            LambdaQueryWrapper<CourseSession> sessionWrapper = new LambdaQueryWrapper<>();
+            if (!CollectionUtils.isEmpty(sessionCond.getWeekdays())) {
+                sessionWrapper.in(CourseSession::getWeekday, sessionCond.getWeekdays());
+            }
+            sessionWrapper.le(start != null, CourseSession::getStartPeriod, start)
+                           .ge(end != null, CourseSession::getEndPeriod, end);
+
+            // 如果已经有候选课程ID，则加上范围过滤
+            if (!CollectionUtils.isEmpty(candidateCourseIds)) {
+                sessionWrapper.in(CourseSession::getCourseId, candidateCourseIds);
+            }
+
+            List<Long> matchedIds = courseSessionMapper.selectList(sessionWrapper).stream()
+                    .map(CourseSession::getCourseId)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (CollectionUtils.isEmpty(matchedIds)) {
+                return Collections.emptyList();
+            }
+
+            if (CollectionUtils.isEmpty(candidateCourseIds)) {
+                // 只有节次条件：候选ID = 节次匹配ID
+                candidateCourseIds = matchedIds;
+                candidateCourses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, candidateCourseIds));
+            } else {
+                // 两者交集
+                candidateCourseIds.retainAll(matchedIds);
+                if (CollectionUtils.isEmpty(candidateCourseIds)) {
+                    return Collections.emptyList();
+                }
+                candidateCourses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, candidateCourseIds));
+            }
+        }
+
+        // 如果两类条件都为空，则返回全部课程
+        if (courseCond == null && sessionCond == null) {
+            candidateCourses = courseMapper.selectList(null);
+            candidateCourseIds = candidateCourses.stream().map(Course::getCourseId).collect(Collectors.toList());
+        }
+
+        Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(candidateCourseIds);
+        return candidateCourses.stream()
+                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<CourseWithSessionsDTO> listCoursesByCondition(CourseQueryRequest request) {
         if (request == null) {
             return Collections.emptyList();
         }
-        // 动态拼接课程字段筛选条件
+        // 动态拼接课程字段筛选条件（原直连逻辑）
         LambdaQueryWrapper<Course> wrapper = buildCourseWrapper(request);
         List<Course> courses = courseMapper.selectList(wrapper);
         if (CollectionUtils.isEmpty(courses)) {
             return Collections.emptyList();
         }
-        List<Long> courseIds = courses.stream()
-                .map(Course::getCourseId)
-                .collect(Collectors.toList());
-
+        List<Long> courseIds = courses.stream().map(Course::getCourseId).collect(Collectors.toList());
         Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
-
         return courses.stream()
                 .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
                         course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
@@ -64,42 +132,30 @@ public class CourseServiceImpl implements CourseService {
             return Collections.emptyList();
         }
         // 查询的节次范围应该被课程节次范围包含（包含关系）
-        // 即：courseSession.startPeriod <= query.startPeriod && courseSession.endPeriod
-        // >= query.endPeriod
         LambdaQueryWrapper<CourseSession> wrapper = new LambdaQueryWrapper<>();
         Integer start = request.getStartPeriod();
         Integer end = request.getEndPeriod();
         if (start != null && end != null && start > end) {
-            int temp = start;
-            start = end;
-            end = temp;
+            int temp = start; start = end; end = temp;
         }
-        wrapper.eq(StringUtils.hasText(request.getWeekday()), CourseSession::getWeekday, request.getWeekday())
-                .le(start != null, CourseSession::getStartPeriod, start)
-                .ge(end != null, CourseSession::getEndPeriod, end);
+        if (!CollectionUtils.isEmpty(request.getWeekdays())) {
+            wrapper.in(CourseSession::getWeekday, request.getWeekdays());
+        }
+        wrapper.le(start != null, CourseSession::getStartPeriod, start)
+               .ge(end != null, CourseSession::getEndPeriod, end);
 
-        // 获取符合条件的课程ID列表
         List<Long> courseIds = courseSessionMapper.selectList(wrapper).stream()
                 .map(CourseSession::getCourseId)
                 .distinct()
                 .collect(Collectors.toList());
-
         if (CollectionUtils.isEmpty(courseIds)) {
             return Collections.emptyList();
         }
-
-        // 根据课程ID查询完整的课程信息
-        List<Course> courses = courseMapper.selectList(
-                new LambdaQueryWrapper<Course>().in(Course::getCourseId, courseIds));
-
+        List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, courseIds));
         if (CollectionUtils.isEmpty(courses)) {
             return Collections.emptyList();
         }
-
-        // 加载节次信息
         Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
-
-        // 组装返回结果
         return courses.stream()
                 .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
                         course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
@@ -108,17 +164,21 @@ public class CourseServiceImpl implements CourseService {
 
     private LambdaQueryWrapper<Course> buildCourseWrapper(CourseQueryRequest request) {
         LambdaQueryWrapper<Course> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(request.getCourseId() != null, Course::getCourseId, request.getCourseId())
-                .like(StringUtils.hasText(request.getCourseName()), Course::getCourseName, request.getCourseName())
-                .eq(request.getCredits() != null, Course::getCredits, request.getCredits())
-                .like(StringUtils.hasText(request.getDescription()), Course::getDescription, request.getDescription())
-                .eq(StringUtils.hasText(request.getCollege()), Course::getCollege, request.getCollege())
-                .eq(request.getInstructorId() != null, Course::getInstructorId, request.getInstructorId())
-                .eq(StringUtils.hasText(request.getCampus()), Course::getCampus, request.getCampus())
-                .eq(StringUtils.hasText(request.getClassroom()), Course::getClassroom, request.getClassroom())
-                .eq(request.getStartWeek() != null, Course::getStartWeek, request.getStartWeek())
-                .eq(request.getEndWeek() != null, Course::getEndWeek, request.getEndWeek())
-                .eq(request.getCapacity() != null, Course::getCapacity, request.getCapacity());
+        if (request == null) {
+            return wrapper;
+        }
+        wrapper.eq(request.getCourseId() != null, Course::getCourseId, request.getCourseId());
+        wrapper.like(StringUtils.hasText(request.getCourseName()), Course::getCourseName, request.getCourseName());
+        wrapper.eq(request.getCredits() != null, Course::getCredits, request.getCredits());
+        wrapper.like(StringUtils.hasText(request.getDescription()), Course::getDescription, request.getDescription());
+        wrapper.eq(StringUtils.hasText(request.getCollege()), Course::getCollege, request.getCollege());
+        // 更新为按instructorName过滤
+        wrapper.like(StringUtils.hasText(request.getInstructorName()), Course::getInstructorName, request.getInstructorName());
+        wrapper.eq(StringUtils.hasText(request.getCampus()), Course::getCampus, request.getCampus());
+        wrapper.eq(StringUtils.hasText(request.getClassroom()), Course::getClassroom, request.getClassroom());
+        wrapper.ge(request.getStartWeek() != null, Course::getStartWeek, request.getStartWeek());
+        wrapper.le(request.getEndWeek() != null, Course::getEndWeek, request.getEndWeek());
+        wrapper.eq(request.getCapacity() != null, Course::getCapacity, request.getCapacity());
         return wrapper;
     }
 
@@ -140,13 +200,15 @@ public class CourseServiceImpl implements CourseService {
         BeanUtils.copyProperties(course, dto);
         dto.setSessions(sessions == null ? Collections.emptyList() : sessions);
         dto.setEnrolledCount(enrolledCount);
+        // 设置instructorName
+        dto.setInstructorName(course.getInstructorName());
         return dto;
     }
 
     @Override
     public List<Object> getAttributeValues(CourseAttributeQueryRequest request) {
         if (request == null || request.getCondition() == null ||
-                !StringUtils.hasText(request.getAttributeName())) {
+                !org.springframework.util.StringUtils.hasText(request.getAttributeName())) {
             return Collections.emptyList();
         }
 

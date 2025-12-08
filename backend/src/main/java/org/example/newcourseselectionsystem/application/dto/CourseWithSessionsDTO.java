@@ -20,7 +20,7 @@ public class CourseWithSessionsDTO {
 
     private String college;
 
-    private Long instructorId;
+    private String instructorName;
 
     private String campus;
 

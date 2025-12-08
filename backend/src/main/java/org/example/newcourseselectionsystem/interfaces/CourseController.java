@@ -5,6 +5,7 @@ import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDT
 import org.example.newcourseselectionsystem.application.request.CourseAttributeQueryRequest;
 import org.example.newcourseselectionsystem.application.request.CourseQueryRequest;
 import org.example.newcourseselectionsystem.application.request.SessionQueryRequest;
+import org.example.newcourseselectionsystem.application.request.CombinedCourseQueryRequest;
 import org.example.newcourseselectionsystem.application.service.CourseService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,14 @@ import java.util.List;
 public class CourseController {
 
     private final CourseService courseService;
+
+    /**
+     * 新的合并查询接口：课程字段 + 可选节次条件
+     */
+    @PostMapping("/search/combined")
+    public List<CourseWithSessionsDTO> searchCombined(@Valid @RequestBody CombinedCourseQueryRequest request) {
+        return courseService.searchCourses(request);
+    }
 
     /**
      * 根据课程字段组合检索，返回携带节次信息的课程信息

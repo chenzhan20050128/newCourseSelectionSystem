@@ -4,6 +4,7 @@ import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDT
 import org.example.newcourseselectionsystem.application.request.CourseAttributeQueryRequest;
 import org.example.newcourseselectionsystem.application.request.CourseQueryRequest;
 import org.example.newcourseselectionsystem.application.request.SessionQueryRequest;
+import org.example.newcourseselectionsystem.application.request.CombinedCourseQueryRequest;
 
 import java.util.List;
 
@@ -11,6 +12,11 @@ import java.util.List;
  * 课程相关业务
  */
 public interface CourseService {
+
+    /**
+     * 合并后的课程查询：支持课程字段筛选 + 节次条件筛选（可同时存在）
+     */
+    List<CourseWithSessionsDTO> searchCourses(CombinedCourseQueryRequest request);
 
     /**
      * 根据课程表的全部字段进行组合过滤，并返回附带节次的课程信息

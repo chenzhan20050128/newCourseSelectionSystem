@@ -5,14 +5,6 @@ DROP TABLE IF EXISTS course_sessions;
 DROP TABLE IF EXISTS courses;
 DROP TABLE IF EXISTS elective_batches;  #选课轮次
 DROP TABLE IF EXISTS students;
-DROP TABLE IF EXISTS instructors;
-
-CREATE TABLE instructors (
-    instructor_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
-    instructor_name   VARCHAR(64) NOT NULL,
-    college           VARCHAR(64) NOT NULL,
-    password          VARCHAR(128) NOT NULL
-);
 
 CREATE TABLE students (
     student_id    BIGINT PRIMARY KEY,
@@ -28,7 +20,7 @@ CREATE TABLE courses (
     credits       INT NOT NULL,
     description   VARCHAR(255),
     college       VARCHAR(64) NOT NULL,
-    instructor_id BIGINT NOT NULL,
+    instructor_name VARCHAR(64) NOT NULL,
     campus        VARCHAR(64) NOT NULL,
     classroom     VARCHAR(64) NOT NULL,
     start_week    INT NOT NULL,
@@ -66,5 +58,3 @@ CREATE TABLE enrollments (
     final_grade   DECIMAL(5,2),
     status        VARCHAR(16) NOT NULL COMMENT '选课状态，如"已选"、"已退选"等'
 );
-
-

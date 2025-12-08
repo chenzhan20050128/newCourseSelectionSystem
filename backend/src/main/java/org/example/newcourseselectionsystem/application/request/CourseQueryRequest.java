@@ -18,7 +18,7 @@ public class CourseQueryRequest {
 
     private String college;
 
-    private Long instructorId;
+    private String instructorName;
 
     private String campus;
 
@@ -30,4 +30,3 @@ public class CourseQueryRequest {
 
     private Integer capacity;
 }
-

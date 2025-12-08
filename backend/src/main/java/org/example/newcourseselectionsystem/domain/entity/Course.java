@@ -1,6 +1,7 @@
 package org.example.newcourseselectionsystem.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -23,7 +24,8 @@ public class Course {
 
     private String college;
 
-    private Long instructorId;
+    @TableField("instructor_name")
+    private String instructorName;
 
     private String campus;
 

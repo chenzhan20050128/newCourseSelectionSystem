@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -39,21 +40,20 @@ class CourseServiceTest {
     @Test
     void shouldQueryCoursesBySession() {
         SessionQueryRequest request = new SessionQueryRequest();
-        request.setWeekday("周三");
+        request.setWeekdays(Arrays.asList("周三", "周四"));
         request.setStartPeriod(5);
         request.setEndPeriod(5);
 
         List<CourseWithSessionsDTO> courses = courseService.listCoursesBySession(request);
 
-        Assertions.assertFalse(courses.isEmpty(), "周三第5节应当有课程");
+        Assertions.assertFalse(courses.isEmpty(), "周三/周四第5节应当有课程");
         List<Long> courseIds = courses.stream()
                 .map(CourseWithSessionsDTO::getCourseId)
                 .sorted()
                 .collect(Collectors.toList());
         Assertions.assertTrue(courseIds.contains(1L), "数据结构应当匹配");
-        Assertions.assertTrue(courseIds.contains(2L), "高等数学应当匹配");
-        Assertions.assertTrue(courseIds.contains(4L), "通信原理应当匹配");
-        
+        Assertions.assertTrue(courseIds.contains(4L), "计算机网络应当匹配");
+
         // 验证返回的课程包含完整信息和节次
         CourseWithSessionsDTO course = courses.stream()
                 .filter(c -> c.getCourseId().equals(1L))

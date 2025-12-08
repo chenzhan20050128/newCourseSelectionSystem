@@ -5,13 +5,6 @@ DROP TABLE IF EXISTS courses;
 DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS instructors;
 
-CREATE TABLE instructors (
-    instructor_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
-    instructor_name   VARCHAR(64) NOT NULL,
-    college           VARCHAR(64) NOT NULL,
-    password          VARCHAR(128) NOT NULL
-);
-
 CREATE TABLE students (
     student_id    BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_name  VARCHAR(64) NOT NULL,
@@ -23,17 +16,17 @@ CREATE TABLE students (
 
 CREATE TABLE courses (
     course_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
-    course_name   VARCHAR(128) NOT NULL,
-    credits       INT NOT NULL,
-    description   VARCHAR(255),
-    college       VARCHAR(64) NOT NULL,
-    instructor_id BIGINT NOT NULL,
-    campus        VARCHAR(64) NOT NULL,
-    classroom     VARCHAR(64) NOT NULL,
-    start_week    INT NOT NULL,
-    end_week      INT NOT NULL,
-    capacity      INT NOT NULL,
-    enrolled_count INT NOT NULL DEFAULT 0
+    course_name   VARCHAR(255) NOT NULL,
+    credits       INT,
+    description   TEXT,
+    college       VARCHAR(255),
+    instructor_name VARCHAR(255),
+    campus        VARCHAR(255),
+    classroom     VARCHAR(255),
+    start_week    INT,
+    end_week      INT,
+    capacity      INT,
+    enrolled_count INT
 );
 
 CREATE TABLE course_sessions (

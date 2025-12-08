@@ -1,12 +1,10 @@
 package org.example.newcourseselectionsystem.infrastructure.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import org.apache.ibatis.annotations.Mapper;
-import org.example.newcourseselectionsystem.domain.entity.Instructor;
-
 /**
- * 教师表 Mapper
+ * 已移除的教师Mapper占位（不再使用）。
+ * 建议后续删除该文件。
  */
-@Mapper
-public interface InstructorMapper extends BaseMapper<Instructor> {
+@Deprecated
+public interface InstructorMapper {
+    // 空接口，占位以避免编译错误引用
 }
