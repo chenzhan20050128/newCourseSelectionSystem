@@ -609,6 +609,7 @@ export default {
     // 组件挂载时初始化选项
     onMounted(() => {
       initializeOptions()
+      handleSearch()
     })
 
     // 组件卸载时清理定时器
