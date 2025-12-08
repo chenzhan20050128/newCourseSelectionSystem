@@ -70,12 +70,6 @@
         课程查询
       </button>
       <button 
-        :class="['tab', { active: activeTab === 'session' }]"
-        @click="activeTab = 'session'"
-      >
-        节次查询
-      </button>
-      <button 
         v-if="user?.userType === 'student'"
         :class="['tab', { active: activeTab === 'myCourses' }]"
         @click="activeTab = 'myCourses'"
@@ -93,7 +87,6 @@
 
     <div class="content">
       <CourseSearch v-if="activeTab === 'course'" />
-      <SessionSearch v-if="activeTab === 'session'" />
       <MyCourses v-if="activeTab === 'myCourses' && user?.userType === 'student'" />
       <SmartCourseSelection v-if="activeTab === 'smartSelection' && user?.userType === 'student'" />
     </div>
@@ -104,7 +97,6 @@
 import { ref, provide, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import CourseSearch from '../components/CourseSearch.vue';
-import SessionSearch from '../components/SessionSearch.vue';
 import MyCourses from '../components/MyCourses.vue';
 import SmartCourseSelection from '../components/SmartCourseSelection.vue';
 import { logout } from '../api/authApi';
@@ -114,7 +106,6 @@ export default {
   name: 'Home',
   components: {
     CourseSearch,
-    SessionSearch,
     MyCourses,
     SmartCourseSelection
   },
@@ -267,11 +258,11 @@ export default {
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
         if (days > 0) {
-          timeRemaining.value = `剩余时间: ${days}天 ${hours}小时 ${minutes}分钟`;
+          timeRemaining.value = `${days}天 ${hours}小时 ${minutes}分钟`;
         } else if (hours > 0) {
-          timeRemaining.value = `剩余时间: ${hours}小时 ${minutes}分钟 ${seconds}秒`;
+          timeRemaining.value = `${hours}小时 ${minutes}分钟 ${seconds}秒`;
         } else {
-          timeRemaining.value = `剩余时间: ${minutes}分钟 ${seconds}秒`;
+          timeRemaining.value = `${minutes}分钟 ${seconds}秒`;
         }
       };
 
@@ -317,21 +308,21 @@ export default {
 
 <style scoped>
 .home-container {
-  max-width: 1200px;
+  max-width: 100%;
   margin: 0 auto;
   background: white;
-  padding: 20px;
+  padding: 10px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  min-height: calc(100vh - 40px);
+  min-height: calc(100vh - 20px);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: -20px -20px 20px -20px;
-  padding: 15px 20px;
+  margin: -10px -10px 15px -10px;
+  padding: 10px 15px;
   background: linear-gradient(135deg, #7C1F89 0%, #5A1566 100%);
   border-radius: 8px 8px 0 0;
   position: relative;
@@ -346,14 +337,14 @@ export default {
 }
 
 .school-logo {
-  width: 45px;
-  height: 45px;
+  width: 35px;
+  height: 35px;
   object-fit: contain;
 }
 
 .header h1 {
   color: white;
-  font-size: 26px;
+  font-size: 22px;
   margin: 0;
   font-weight: 600;
 }
@@ -370,13 +361,13 @@ export default {
 }
 
 .logout-btn {
-  padding: 8px 20px;
+  padding: 6px 16px;
   background: rgba(255, 255, 255, 0.2);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 5px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.3s;
 }
 
@@ -388,17 +379,17 @@ export default {
 .tabs {
   display: flex;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   border-bottom: 2px solid #e0e0e0;
   padding-bottom: 0;
 }
 
 .tab {
-  padding: 12px 24px;
+  padding: 10px 20px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   color: #666;
   border-bottom: 3px solid transparent;
   transition: all 0.3s;
@@ -417,7 +408,7 @@ export default {
 }
 
 .content {
-  margin-top: 20px;
+  margin-top: 10px;
 }
 
 /* Header中的选课轮次信息样式 */
