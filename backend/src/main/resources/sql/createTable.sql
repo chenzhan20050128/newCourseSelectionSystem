@@ -15,7 +15,7 @@ CREATE TABLE students (
 );
 
 CREATE TABLE courses (
-    course_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
+    course_id     BIGINT PRIMARY KEY,
     course_name   VARCHAR(128) NOT NULL,
     credits       INT NOT NULL,
     description   VARCHAR(255),
