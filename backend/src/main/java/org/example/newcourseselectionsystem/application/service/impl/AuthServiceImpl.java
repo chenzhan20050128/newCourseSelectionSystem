@@ -101,7 +101,7 @@ public class AuthServiceImpl implements AuthService {
         if (!StringUtils.hasText(rawPassword)) {
             return "";
         }
-        return DigestUtils.md5DigestHex(rawPassword.getBytes(StandardCharsets.UTF_8));
+        return DigestUtils.md5DigestAsHex(rawPassword.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
