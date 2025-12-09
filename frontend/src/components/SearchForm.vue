@@ -6,7 +6,7 @@
         <div class="search-item">
           <div class="search-label">课程信息:</div>
           <div class="search-inputs">
-            <input v-model.number="query.courseId" type="number" placeholder="课程号" class="std-input w-80" />
+            <input v-model.number="query.courseId" type="text" placeholder="课程号" class="std-input w-80" />
             <AutocompleteInput
               v-model="query.courseName"
               placeholder="课程名"
@@ -60,9 +60,9 @@
           <div class="search-label">上课时间:</div>
           <div class="search-inputs">
             <div class="range-group">
-              <input v-model.number="query.startWeek" type="number" placeholder="始" class="std-input w-40 center-text" />
+              <input v-model.number="query.startWeek" type="number" min="1" placeholder="始" class="std-input w-40 center-text" />
               <span class="separator">-</span>
-              <input v-model.number="query.endWeek" type="number" placeholder="终" class="std-input w-40 center-text" />
+              <input v-model.number="query.endWeek" type="number" min="1" placeholder="终" class="std-input w-40 center-text" />
             </div>
             <select v-model="query.weekday" class="std-select w-70">
               <option value="">周几</option>
@@ -144,31 +144,16 @@ export default {
       return async (queryString) => {
         try {
           const condition = buildCondition(fieldName)
-          // If queryString is present, maybe we should add it to condition?
-          // But getAttributeValues usually returns all values matching the condition.
-          // If we want to filter by the input text, we can do it client side or server side.
-          // The API getAttributeValues returns unique values for the attribute based on condition.
-          // It doesn't seem to take a "like" query for the attribute itself in the standard way, 
-          // or maybe it does if we add it to condition?
-          // If I add { courseName: queryString } to condition, it might do an exact match or like match depending on backend.
-          // Usually autocomplete wants "starts with" or "contains".
-          // Let's assume the backend returns a list and we filter it, OR we pass the partial value.
-          // If I pass the partial value in condition, the backend might filter it.
           
-          // Let's try passing it in condition if it's not empty.
+          // 将当前输入作为条件传递给后端，以便后端进行模糊匹配
           if (queryString) {
-             // condition[fieldName] = queryString // This might be too strict if backend does exact match
+             condition[fieldName] = queryString
           }
           
           const values = await getAttributeValues({
             condition: condition,
             attributeName: fieldName
           })
-          
-          // Filter client side if backend returns all
-          if (queryString && values) {
-             return values.filter(v => String(v).toLowerCase().includes(String(queryString).toLowerCase()))
-          }
           
           return values || []
         } catch (err) {
