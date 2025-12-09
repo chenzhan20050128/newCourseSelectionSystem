@@ -1,9 +1,9 @@
 <template>
   <div class="course-card-row">
-    <div class="col col-id" title="课程号">{{ course.courseId }}</div>
+    <div class="col col-id" title="课程号">{{ String(course.courseId).padStart(8, '0') }}</div>
     <div class="col col-name" :title="course.courseName">{{ course.courseName }}</div>
     <div class="col col-credit" title="学分">{{ course.credits }}</div>
-    <div class="col col-instructor" :title="course.instructorId">{{ course.instructorId }}</div>
+    <div class="col col-instructor" :title="course.instructorName">{{ course.instructorName }}</div>
     
     <div class="col col-time">
       <div v-if="course.sessions && course.sessions.length > 0" class="sessions-list">
@@ -136,22 +136,22 @@ export default {
 }
 
 .col {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
   padding: 0 4px;
+  word-break: break-word;
 }
 
 /* Column Widths - Must match header in parent component */
-.col-id { flex: 0 0 60px; color: #888; }
+.col-id { flex: 0 0 80px; color: #888; }
 .col-name { flex: 1 1 140px; font-weight: 600; color: #1f1f1f; font-size: 15px; }
 .col-credit { flex: 0 0 40px; text-align: left; padding-left: 8px; }
-.col-instructor { flex: 0 0 70px; }
-.col-time { flex: 1 1 120px; font-size: 12px; }
+.col-instructor { flex: 0 0 150px; }
+.col-time { flex: 1 1 100px; font-size: 12px; }
 .col-weeks { flex: 0 0 60px; text-align: center; }
-.col-location { flex: 0 0 90px; }
+.col-location { flex: 0 0 180px; }
 .col-campus { flex: 0 0 70px; }
-.col-college { flex: 0 0 90px; }
+.col-college { flex: 0 0 150px; }
 .col-capacity { flex: 0 0 70px; text-align: center; }
 .col-actions { flex: 0 0 100px; display: flex; justify-content: center; position: relative; }
 

@@ -55,7 +55,7 @@
 
 <script>
 import { ref, reactive, watch, onMounted, onUnmounted, inject } from 'vue'
-import { searchCourses, searchCoursesBySession, enrollCourse, dropCourse } from '../api/courseApi'
+import { searchCombinedCourses, enrollCourse, dropCourse } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import SearchForm from './SearchForm.vue'
 
@@ -86,77 +86,45 @@ export default {
       results.value = []
 
       try {
-        // 检查是否有时间条件
-        const hasTimeQuery = query.weekday || (query.startPeriod !== null && query.startPeriod !== '') || (query.endPeriod !== null && query.endPeriod !== '')
-        
-        // 检查是否有普通条件
-        const normalQueryKeys = ['courseId', 'courseName', 'credits', 'description', 'college', 'instructorId', 'campus', 'classroom', 'startWeek', 'endWeek']
-        const hasNormalQuery = normalQueryKeys.some(key => {
-          const val = query[key]
-          return val !== null && val !== '' && val !== undefined
-        })
-
-        let data = []
-
-        if (hasNormalQuery) {
-          // 如果有普通条件，先按普通条件查
-          const request = {}
-          Object.keys(query).forEach(key => {
-             if (query[key] !== null && query[key] !== '' && query[key] !== undefined) {
-               request[key] = query[key]
-             }
-          })
-          delete request.weekday
-          delete request.startPeriod
-          delete request.endPeriod
-          
-          data = await searchCourses(request) || []
-
-          // 如果也有时间条件，则在前端进行过滤
-          if (hasTimeQuery) {
-            data = data.filter(course => {
-              if (!course.sessions || course.sessions.length === 0) return false
-              
-              return course.sessions.some(session => {
-                if (query.weekday && session.weekday !== query.weekday) return false
-                
-                const qStart = query.startPeriod ? Number(query.startPeriod) : 1
-                const qEnd = query.endPeriod ? Number(query.endPeriod) : 12
-                
-                return Math.max(session.startPeriod, qStart) <= Math.min(session.endPeriod, qEnd)
-              })
-            })
-          }
-        } else if (hasTimeQuery) {
-          if (!query.weekday || !query.startPeriod || !query.endPeriod) {
-             if (query.weekday && query.startPeriod && query.endPeriod) {
-                 data = await searchCoursesBySession({
-                   weekday: query.weekday,
-                   startPeriod: query.startPeriod,
-                   endPeriod: query.endPeriod
-                 }) || []
-             } else {
-                 // 尝试只用已有的条件过滤，或者提示错误
-                 // 这里简单处理：如果只有部分时间条件，提示错误
-                 if (query.weekday || query.startPeriod || query.endPeriod) {
-                    error.value = '按节次查询时，请完整填写周几、开始节次和结束节次'
-                    loading.value = false
-                    return
-                 }
-                 // 如果全空，查所有
-                 data = await searchCourses({}) || []
-             }
-          } else {
-             data = await searchCoursesBySession({
-               weekday: query.weekday,
-               startPeriod: query.startPeriod,
-               endPeriod: query.endPeriod
-             }) || []
-          }
-        } else {
-          data = await searchCourses({}) || []
+        const combinedRequest = {
+          courseCondition: null,
+          sessionCondition: null
         }
 
+        // 1. 构建 courseCondition
+        const courseCondition = {}
+        const normalKeys = ['courseId', 'courseName', 'credits', 'description', 'college', 'campus', 'classroom', 'startWeek', 'endWeek']
+        
+        let hasCourseCondition = false
+        normalKeys.forEach(key => {
+          if (query[key] !== null && query[key] !== '' && query[key] !== undefined) {
+            courseCondition[key] = query[key]
+            hasCourseCondition = true
+          }
+        })
+        
+        // 如果 query 中有 instructorName 则传递
+        if (query.instructorName) {
+             courseCondition.instructorName = query.instructorName
+             hasCourseCondition = true
+        }
+
+        if (hasCourseCondition) {
+          combinedRequest.courseCondition = courseCondition
+        }
+
+        // 2. 构建 sessionCondition
+        const hasTimeQuery = query.weekday || (query.startPeriod !== null && query.startPeriod !== '') || (query.endPeriod !== null && query.endPeriod !== '')
+        
+        if (hasTimeQuery) {
+          combinedRequest.sessionCondition = {
+            weekdays: query.weekday ? [query.weekday] : null,
+            startPeriod: query.startPeriod ? Number(query.startPeriod) : null,
+            endPeriod: query.endPeriod ? Number(query.endPeriod) : null
+          }
+        }
+
+        const data = await searchCombinedCourses(combinedRequest) || []
         results.value = data
       } catch (err) {
         error.value = err.message || '查询失败'
@@ -334,15 +302,15 @@ h2 {
 }
 
 /* Column Widths - Must match CourseCard.vue */
-.col-id { flex: 0 0 60px; }
+.col-id { flex: 0 0 80px; }
 .col-name { flex: 1 1 140px; }
 .col-credit { flex: 0 0 40px; text-align: left; padding-left: 8px; }
-.col-instructor { flex: 0 0 70px; }
-.col-time { flex: 1 1 120px; }
+.col-instructor { flex: 0 0 150px; }
+.col-time { flex: 1 1 100px; }
 .col-weeks { flex: 0 0 60px; text-align: center; }
-.col-location { flex: 0 0 90px; }
+.col-location { flex: 0 0 180px; }
 .col-campus { flex: 0 0 70px; }
-.col-college { flex: 0 0 90px; }
+.col-college { flex: 0 0 150px; }
 .col-capacity { flex: 0 0 70px; text-align: center; }
 .col-actions { flex: 0 0 100px; text-align: center; }
 

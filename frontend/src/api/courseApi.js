@@ -49,6 +49,15 @@ export function searchCourses(queryRequest) {
 }
 
 /**
+ * 综合查询课程（课程条件 + 节次条件）
+ * @param {Object} combinedRequest - 综合查询请求对象
+ * @returns {Promise<Array>} 课程列表
+ */
+export function searchCombinedCourses(combinedRequest) {
+  return api.post('/courses/search/combined', combinedRequest)
+}
+
+/**
  * 根据节次条件查询课程，返回完整的课程信息
  * @param {Object} sessionRequest - 节次查询请求对象
  * @returns {Promise<Array>} 课程列表（包含完整课程信息和节次信息）
