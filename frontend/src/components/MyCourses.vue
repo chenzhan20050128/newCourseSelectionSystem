@@ -48,8 +48,39 @@
 
           <!-- 课程表主体 -->
           <template v-for="period in periods" :key="period.period">
-            <!-- 左侧节次和时间 -->
-            <div class="period-header">
+            <!-- 上午时段标签（第1节） -->
+            <div v-if="period.period === 1" class="time-period-label morning-label">
+              <span class="period-label-text">上午</span>
+            </div>
+            
+            <!-- 午间分隔行（在第4节后） -->
+            <div v-if="period.period === 5" class="time-break time-break-with-text">
+              <span class="break-text">午 间</span>
+            </div>
+            
+            <!-- 下午时段标签（第5节） -->
+            <div v-if="period.period === 5" class="time-period-label afternoon-label">
+              <span class="period-label-text">下午</span>
+            </div>
+            
+            <!-- 傍晚分隔行（在第8节后） -->
+            <div v-if="period.period === 9" class="time-break time-break-with-text">
+              <span class="break-text">傍 晚</span>
+            </div>
+            
+            <!-- 晚间时段标签（第9节） -->
+            <div v-if="period.period === 9" class="time-period-label evening-label">
+              <span class="period-label-text">晚间</span>
+            </div>
+
+            <!-- 左侧节次和时间（不显示时段标签的行） -->
+            <div v-if="![1, 5, 9].includes(period.period)" class="period-header" :data-period="period.period">
+              <div class="period-number">第{{ period.period }}节</div>
+              <div class="period-time">{{ period.time }}</div>
+            </div>
+            
+            <!-- 有时段标签的行，节次时间部分 -->
+            <div v-else class="period-header period-header-with-label" :data-period="period.period">
               <div class="period-number">第{{ period.period }}节</div>
               <div class="period-time">{{ period.time }}</div>
             </div>
@@ -65,7 +96,8 @@
               }"
               :data-day="day"
               :data-period="period.period"
-              @click="handleCellClick(day, period.period)"
+              @mouseenter="handleCellHover(day, period.period)"
+              @mouseleave="handleCellLeave(day, period.period)"
             >
               <!-- 该单元格的所有课程块 -->
               <div 
@@ -78,6 +110,7 @@
                 :style="getBlockStyle(block)"
                 @click.stop="showCourseDetail(block.course)"
               >
+                <div v-if="hasMultipleCampuses" class="campus-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ (block.course.campus || '未知').replace('杀区', '') }}</div>
                 <div class="course-name-text">{{ block.course.courseName }}</div>
                 <div class="course-location">{{ block.course.classroom }}</div>
               </div>
@@ -89,10 +122,7 @@
                 @click.stop
               >
                 <p class="confirm-text">查询可选课程？</p>
-                <div class="button-group">
-                  <button class="btn-confirm-small" @click.stop="confirmSearchCourses">确认</button>
-                  <button class="btn-cancel-small" @click.stop="cancelSearchCourses">取消</button>
-                </div>
+                <button class="btn-confirm-small" @click.stop="confirmSearchCourses">确认</button>
               </div>
             </div>
           </template>
@@ -274,6 +304,19 @@ export default {
       { period: 10, time: '19:30-20:20' },
       { period: 11, time: '20:30-21:20' }
     ]
+
+    /**
+     * 检测是否有跨校区课程
+     */
+    const hasMultipleCampuses = computed(() => {
+      const campuses = new Set()
+      courses.value.forEach(course => {
+        if (course.campus) {
+          campuses.add(course.campus)
+        }
+      })
+      return campuses.size > 1
+    })
 
     // 颜色池 - 50种丰富多彩的颜色
     const colorPalette = [
@@ -482,6 +525,18 @@ export default {
     }
 
     /**
+     * 获取校区标识的样式（使用课程颜色的深色版本）
+     */
+    const getCampusBadgeStyle = (courseId) => {
+      const color = getCourseColor(courseId)
+      // 使用border颜色作为校区标识的背景色（通常是较深的颜色）
+      return {
+        background: color.border,
+        color: 'white'
+      }
+    }
+
+    /**
      * 获取单元格的冲突数量
      */
     const getCellConflictCount = (block, weekday, period) => {
@@ -511,28 +566,32 @@ export default {
     }
 
     /**
-     * 处理单元格点击事件
+     * 处理单元格鼠标悬停事件
      * 如果单元格为空，在单元格内显示确认按钮
      */
-    const handleCellClick = (weekday, period) => {
+    const handleCellHover = (weekday, period) => {
       // 检查该单元格是否有课程
       const cellBlocks = getCellBlocks(weekday, period)
       if (cellBlocks.length > 0) {
-        // 如果有课程，不处理（课程块有自己的点击事件）
-        return
-      }
-
-      // 如果已经显示确认按钮，则关闭它
-      if (showConfirmDialog.value && 
-          confirmDialogInfo.value.weekday === weekday && 
-          confirmDialogInfo.value.period === period) {
-        cancelSearchCourses()
+        // 如果有课程，不处理
         return
       }
 
       // 如果单元格为空，在单元格内显示确认按钮
       confirmDialogInfo.value = { weekday, period }
       showConfirmDialog.value = true
+    }
+
+    /**
+     * 处理单元格鼠标离开事件
+     */
+    const handleCellLeave = (weekday, period) => {
+      // 鼠标离开时关闭确认按钮
+      if (showConfirmDialog.value && 
+          confirmDialogInfo.value.weekday === weekday && 
+          confirmDialogInfo.value.period === period) {
+        cancelSearchCourses()
+      }
     }
 
     /**
@@ -791,7 +850,10 @@ export default {
       queryTimeInfo,
       enrollingCourses,
       operationMessage,
-      handleCellClick,
+      handleCellHover,
+      handleCellLeave,
+      hasMultipleCampuses,
+      getCampusBadgeStyle,
       closeAvailableCoursesDialog,
       handleEnrollFromDialog,
       showConfirmDialog,
@@ -926,8 +988,8 @@ export default {
 
 .schedule-grid {
   display: grid;
-  grid-template-columns: 90px repeat(7, 1fr);
-  grid-template-rows: 45px repeat(11, 65px);
+  grid-template-columns: 35px 55px repeat(7, 1fr);
+  grid-template-rows: 45px repeat(4, 65px) 16px repeat(4, 65px) 16px repeat(3, 65px);
   border: 1px solid #e0e0e0;
   background: white;
   border-radius: 8px;
@@ -935,7 +997,19 @@ export default {
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
-.grid-header {
+.grid-header:first-child {
+  grid-column: 1 / 3;
+  background: #7C1F89;
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.grid-header.day-header {
   background: #7C1F89;
   color: white;
   border: none;
@@ -967,6 +1041,39 @@ export default {
   text-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
+/* 时段标签（上午/下午/晚间） */
+.time-period-label {
+  background: linear-gradient(180deg, #f3e5f5 0%, #e1bee7 100%);
+  color: #6a1b9a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  border-right: 2px solid #dee2e6;
+  border-bottom: 1px solid #e9ecef;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 3px;
+  padding: 8px 0;
+}
+
+.morning-label {
+  grid-row: 2 / 6;
+}
+
+.afternoon-label {
+  grid-row: 7 / 11;
+}
+
+.evening-label {
+  grid-row: 12 / 15;
+}
+
+.period-label-text {
+  display: inline-block;
+}
+
 .period-header {
   background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
   border: none;
@@ -977,6 +1084,10 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 4px 2px;
+}
+
+.period-header-with-label {
+  background: linear-gradient(90deg, #ffffff 0%, #f8f9fa 100%);
 }
 
 .period-number {
@@ -1002,6 +1113,24 @@ export default {
   overflow: visible;
   grid-column: auto;
   transition: all 0.2s ease;
+}
+
+/* 时间分隔行 */
+.time-break-with-text {
+  grid-column: 1 / -1;
+  background: white;
+  border-top: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.break-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  letter-spacing: 8px;
 }
 
 .schedule-cell.empty-cell {
@@ -1038,7 +1167,7 @@ export default {
 
 .confirm-text {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: #7C1F89;
   font-weight: 600;
   white-space: nowrap;
@@ -1050,19 +1179,15 @@ export default {
   gap: 4px;
 }
 
-.btn-confirm-small,
-.btn-cancel-small {
-  padding: 4px 10px;
+.btn-confirm-small {
+  padding: 4px 12px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   transition: all 0.2s;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.btn-confirm-small {
   background: #7C1F89;
   color: white;
 }
@@ -1070,18 +1195,6 @@ export default {
 .btn-confirm-small:hover {
   background: #9C27B0;
   box-shadow: 0 2px 5px rgba(124, 31, 137, 0.3);
-}
-
-.btn-cancel-small {
-  background: rgba(255, 255, 255, 0.95);
-  color: #666;
-  border: 1px solid #ddd;
-}
-
-.btn-cancel-small:hover {
-  background: white;
-  border-color: #7C1F89;
-  color: #7C1F89;
 }
 
 .course-block {
@@ -1099,6 +1212,27 @@ export default {
   box-sizing: border-box;
   min-height: 0;
   backdrop-filter: blur(10px);
+  position: relative;
+}
+
+/* 校区标识 */
+.campus-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  line-height: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+.course-block:hover .campus-badge {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
 }
 
 .course-block:hover {
@@ -1130,7 +1264,7 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
 }
 
@@ -1440,8 +1574,12 @@ export default {
   }
   
   .schedule-grid {
-    grid-template-columns: 80px repeat(7, 1fr);
-    grid-template-rows: 42px repeat(11, 60px);
+    grid-template-columns: 32px 50px repeat(7, 1fr);
+    grid-template-rows: 42px repeat(4, 60px) 16px repeat(4, 60px) 16px repeat(3, 60px);
+  }
+  
+  .time-period-label {
+    font-size: 12px;
   }
   
   .period-header {
@@ -1461,8 +1599,14 @@ export default {
     padding: 5px 6px;
   }
   
+  .campus-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+  
   .course-name-text {
     font-size: 10px;
+    -webkit-line-clamp: 4;
   }
   
   .course-location {
@@ -1489,8 +1633,12 @@ export default {
   }
   
   .schedule-grid {
-    grid-template-columns: 70px repeat(7, 1fr);
-    grid-template-rows: 38px repeat(11, 55px);
+    grid-template-columns: 30px 45px repeat(7, 1fr);
+    grid-template-rows: 38px repeat(4, 55px) 14px repeat(4, 55px) 14px repeat(3, 55px);
+  }
+  
+  .time-period-label {
+    font-size: 11px;
   }
   
   .grid-header {
@@ -1525,10 +1673,15 @@ export default {
     border-left-width: 2px;
   }
   
+  .campus-badge {
+    font-size: 7px;
+    padding: 1px 3px;
+  }
+  
   .course-name-text {
     font-size: 9px;
     margin-bottom: 2px;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
   }
   
   .course-location {
@@ -1595,8 +1748,12 @@ export default {
   }
   
   .schedule-grid {
-    grid-template-columns: 60px repeat(7, 1fr);
-    grid-template-rows: 32px repeat(11, 50px);
+    grid-template-columns: 28px 42px repeat(7, 1fr);
+    grid-template-rows: 32px repeat(4, 50px) 12px repeat(4, 50px) 12px repeat(3, 50px);
+  }
+  
+  .time-period-label {
+    font-size: 10px;
   }
   
   .grid-header {
@@ -1629,6 +1786,11 @@ export default {
     font-size: 8px;
     padding: 3px 4px;
     border-left-width: 2px;
+  }
+  
+  .campus-badge {
+    font-size: 7px;
+    padding: 1px 2px;
   }
   
   .course-name-text {
