@@ -193,27 +193,35 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         }
 
         // 3. 查询选课记录（必须存在且状态为"已选"）
+        // 注意：一个课程可能有多个session，学生可能选了多个时间段
         LambdaQueryWrapper<Enrollment> enrollmentWrapper = new LambdaQueryWrapper<>();
         enrollmentWrapper.eq(Enrollment::getStudentId, studentId)
                 .eq(Enrollment::getCourseId, courseId)
                 .eq(Enrollment::getStatus, "已选");
-        Enrollment enrollment = enrollmentMapper.selectOne(enrollmentWrapper);
+        List<Enrollment> enrollments = enrollmentMapper.selectList(enrollmentWrapper);
         
-        if (enrollment == null) {
+        if (CollectionUtils.isEmpty(enrollments)) {
             return EnrollmentResponse.builder()
                     .success(false)
                     .message("您尚未选择该课程或该课程已退选")
                     .build();
         }
 
-        // 4. 更新选课记录状态为"已退选"
-        enrollment.setStatus("已退选");
-        enrollmentMapper.updateById(enrollment);
+        // 4. 批量更新所有选课记录状态为"已退选"
+        int droppedCount = 0;
+        for (Enrollment enrollment : enrollments) {
+            enrollment.setStatus("已退选");
+            enrollmentMapper.updateById(enrollment);
+            droppedCount++;
+        }
 
-        // 5. 更新课程的已选人数（减1，确保不会小于0）
+        // 5. 更新课程的已选人数（减去退选的数量，确保不会小于0）
         Integer enrolledCount = course.getEnrolledCount() != null ? course.getEnrolledCount() : 0;
-        if (enrolledCount > 0) {
-            course.setEnrolledCount(enrolledCount - 1);
+        if (enrolledCount >= droppedCount) {
+            course.setEnrolledCount(enrolledCount - droppedCount);
+            courseMapper.updateById(course);
+        } else if (enrolledCount > 0) {
+            course.setEnrolledCount(0);
             courseMapper.updateById(course);
         }
 
@@ -221,7 +229,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 .success(true)
                 .message("退课成功")
                 .warn(null)
-                .enrollmentId(enrollment.getEnrollmentId())
+                .enrollmentId(enrollments.get(0).getEnrollmentId())
                 .build();
     }
 

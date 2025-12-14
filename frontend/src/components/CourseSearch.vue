@@ -160,6 +160,31 @@ export default {
         return
       }
 
+      // 检查选课轮次是否在有效时间内
+      const selectedBatchStr = localStorage.getItem('selectedBatch')
+      if (selectedBatchStr) {
+        try {
+          const selectedBatch = JSON.parse(selectedBatchStr)
+          const now = new Date()
+          const startTime = new Date(selectedBatch.startTime)
+          const endTime = new Date(selectedBatch.endTime)
+          
+          if (now < startTime) {
+            setOperationMessage(course.courseId, 'error', `选课轮次尚未开始，开始时间：${selectedBatch.startTime}`)
+            enrollingCourses.value.delete(course.courseId)
+            return
+          }
+          
+          if (now > endTime) {
+            setOperationMessage(course.courseId, 'error', `选课轮次已结束，结束时间：${selectedBatch.endTime}`)
+            enrollingCourses.value.delete(course.courseId)
+            return
+          }
+        } catch (err) {
+          console.error('解析选课轮次信息失败:', err)
+        }
+      }
+
       try {
         const response = await enrollCourse({
           studentId: studentId.value,
