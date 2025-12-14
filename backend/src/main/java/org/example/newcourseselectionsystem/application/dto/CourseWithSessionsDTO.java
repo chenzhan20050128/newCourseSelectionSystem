@@ -35,4 +35,9 @@ public class CourseWithSessionsDTO {
     private Integer enrolledCount;
 
     private List<CourseSessionDTO> sessions;
+
+    /**
+     * 是否已被指定学生选中（仅在查询时提供了 studentId 时才有意义）
+     */
+    private Boolean isEnrolled;
 }

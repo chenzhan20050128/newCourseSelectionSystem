@@ -35,4 +35,9 @@ public interface CourseService {
      * @return 属性值的唯一集合
      */
     List<Object> getAttributeValues(CourseAttributeQueryRequest request);
+
+    /**
+     * 根据课程ID列表批量查询课程并携带节次，封装为DTO
+     */
+    List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds);
 }

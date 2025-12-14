@@ -20,5 +20,9 @@ public class CombinedCourseQueryRequest {
      */
     @Valid
     private SessionQueryRequest sessionCondition;
-}
 
+    /**
+     * 学生ID（可选）。如果提供，将在返回的课程中标记该学生是否已选该课程。
+     */
+    private Long studentId;
+}
