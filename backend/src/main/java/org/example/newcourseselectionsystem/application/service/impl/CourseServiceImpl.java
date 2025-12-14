@@ -171,6 +171,22 @@ public class CourseServiceImpl implements CourseService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds) {
+        if (CollectionUtils.isEmpty(courseIds)) {
+            return Collections.emptyList();
+        }
+        List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, courseIds));
+        if (CollectionUtils.isEmpty(courses)) {
+            return Collections.emptyList();
+        }
+        Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
+        return courses.stream()
+                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
+                .collect(Collectors.toList());
+    }
+
     private LambdaQueryWrapper<Course> buildCourseWrapper(CourseQueryRequest request) {
         LambdaQueryWrapper<Course> wrapper = new LambdaQueryWrapper<>();
         if (request == null) {

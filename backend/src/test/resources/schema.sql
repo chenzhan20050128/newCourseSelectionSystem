@@ -14,6 +14,13 @@ CREATE TABLE students (
     password      VARCHAR(128) NOT NULL
 );
 
+CREATE TABLE instructors (
+    instructor_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    instructor_name VARCHAR(255) NOT NULL,
+    college       VARCHAR(255) NOT NULL,
+    password      VARCHAR(128) NOT NULL
+);
+
 CREATE TABLE courses (
     course_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
     course_name   VARCHAR(255) NOT NULL,
@@ -26,7 +33,8 @@ CREATE TABLE courses (
     start_week    INT,
     end_week      INT,
     capacity      INT,
-    enrolled_count INT
+    enrolled_count INT,
+    type          VARCHAR(50)
 );
 
 CREATE TABLE course_sessions (

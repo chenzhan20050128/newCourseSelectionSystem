@@ -38,4 +38,7 @@ public class Course {
     private Integer capacity;
 
     private Integer enrolledCount;
+
+    // 新增课程类型字段，用于毕业要求分类
+    private String type;
 }
