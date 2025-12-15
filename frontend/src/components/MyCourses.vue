@@ -9,13 +9,22 @@
           <span class="stat-item">总学分 <strong>{{ totalCredits }}</strong> 分</span>
         </div>
       </div>
-      <button 
-        class="btn-refresh" 
-        @click="loadCourses"
-        :disabled="loading || !studentId"
-      >
-        {{ loading ? '加载中...' : '刷新' }}
-      </button>
+      <div class="header-actions">
+        <button 
+          class="btn-list-view" 
+          @click="showCourseList = true"
+          :disabled="loading || !studentId || courses.length === 0"
+        >
+          查看已选课程
+        </button>
+        <button 
+          class="btn-refresh" 
+          @click="loadCourses"
+          :disabled="loading || !studentId"
+        >
+          {{ loading ? '加载中...' : '刷新' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="!studentId" class="no-student-id">
@@ -24,6 +33,10 @@
 
     <div v-if="error" class="error-message">
       {{ error }}
+    </div>
+
+    <div v-if="successMessage" class="success-message-toast">
+      {{ successMessage }}
     </div>
 
     <div v-if="loading && courses.length === 0" class="loading">
@@ -191,6 +204,57 @@
       </div>
     </div>
 
+    <!-- 课程列表对话框 -->
+    <div v-if="showCourseList" class="dialog-overlay" @click.self="showCourseList = false">
+      <div class="dialog-content course-list-dialog">
+        <div class="dialog-header">
+          <h3>已选课程列表</h3>
+          <button class="dialog-close" @click="showCourseList = false">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <div class="course-list-table-container">
+            <table class="course-list-table">
+              <thead>
+                <tr>
+                  <th>课程名称</th>
+                  <th>学分</th>
+                  <th>校区</th>
+                  <th>上课时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="course in courses" :key="course.courseId">
+                  <td class="course-name-cell">
+                    <div class="course-name-main">{{ course.courseName }}</div>
+                    <div class="course-id-sub">{{ course.courseId }}</div>
+                  </td>
+                  <td>{{ course.credits }}</td>
+                  <td>{{ course.campus || '-' }}</td>
+                  <td class="course-time-cell">
+                    <div v-for="session in course.sessions" :key="session.sessionId" class="session-item">
+                      {{ session.weekday }} {{ session.startPeriod }}-{{ session.endPeriod }}节
+                      <span v-if="session.weekType === 1" class="week-tag single">单</span>
+                      <span v-if="session.weekType === 2" class="week-tag double">双</span>
+                    </div>
+                  </td>
+                  <td>
+                    <button 
+                      class="btn-drop-small"
+                      @click="handleDrop(course)"
+                      :disabled="droppingCourses.has(course.courseId)"
+                    >
+                      {{ droppingCourses.has(course.courseId) ? '退课中...' : '退课' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 可选课程列表对话框 -->
     <div v-if="showAvailableCourses" class="dialog-overlay" @click="closeAvailableCoursesDialog">
       <div class="dialog-content available-courses-dialog" @click.stop>
@@ -269,6 +333,8 @@ export default {
     const loading = ref(false)
     const error = ref('')
     const selectedCourse = ref(null)
+    const showCourseList = ref(false)
+    const successMessage = ref('')
     
     // 退课相关状态
     const droppingCourses = ref(new Set())
@@ -776,7 +842,7 @@ export default {
         loading.value = false
       }
     }
-
+    
     /**
      * 处理退课
      */
@@ -855,11 +921,13 @@ export default {
       studentId,
       courses,
       loading,
+      successMessage,
       error,
       droppingCourses,
       totalCredits,
       weekdays,
       periods,
+      showCourseList,
       selectedCourse,
       loadCourses,
       handleDrop,
@@ -940,6 +1008,36 @@ export default {
 .stat-divider {
   color: #ddd;
   font-weight: 300;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-list-view {
+  padding: 8px 16px;
+  background: white;
+  color: #7C1F89;
+  border: 1px solid #7C1F89;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-list-view:hover:not(:disabled) {
+  background: #f3e5f5;
+}
+
+.btn-list-view:disabled {
+  border-color: #ccc;
+  color: #999;
+  cursor: not-allowed;
 }
 
 .btn-refresh {
@@ -1294,7 +1392,95 @@ export default {
 }
 
 .course-name-text {
+  font-weight: bold;
+}
+
+/* 课程列表对话框样式 */
+.course-list-dialog {
+  max-width: 800px;
+}
+
+.course-list-table-container {
+  overflow-x: auto;
+}
+
+.course-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.course-list-table th {
+  background: #f8f9fa;
+  padding: 12px;
+  text-align: left;
   font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.course-list-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+.course-name-main {
+  font-weight: 600;
+  color: #333;
+}
+
+.course-id-sub {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.session-item {
+  margin-bottom: 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.week-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  color: white;
+}
+
+.week-tag.single {
+  background-color: #7C1F89;
+}
+
+.week-tag.double {
+  background-color: #1976D2;
+}
+
+.btn-drop-small {
+  padding: 4px 10px;
+  background: white;
+  color: #ff4d4f;
+  border: 1px solid #ff4d4f;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.btn-drop-small:hover:not(:disabled) {
+  background: #fff1f0;
+}
+
+.btn-drop-small:disabled {
+  border-color: #ccc;
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+/* ont-weight: 600;
   margin-bottom: 3px;
   line-height: 1.3;
   font-size: 11px;
