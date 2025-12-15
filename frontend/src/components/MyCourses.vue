@@ -111,6 +111,7 @@
                 @click.stop="showCourseDetail(block.course)"
               >
                 <div v-if="hasMultipleCampuses" class="campus-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ (block.course.campus || '未知').replace('杀区', '') }}</div>
+                <div v-if="block.session.weekType && block.session.weekType !== 0" class="week-type-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ block.session.weekType === 1 ? '单' : '双' }}</div>
                 <div class="course-name-text">{{ block.course.courseName }}</div>
                 <div class="course-location">{{ block.course.classroom }}</div>
               </div>
@@ -1247,12 +1248,23 @@ export default {
   right: 0;
   font-size: 11px;
   font-weight: 700;
-  padding: 5px 10px;
-  line-height: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  z-index: 10;
-  letter-spacing: 0.5px;
-  transition: all 0.2s ease;
+  padding: 2px 5px;
+  border-bottom-left-radius: 6px;
+  box-shadow: -1px 1px 2px rgba(0,0,0,0.1);
+  z-index: 2;
+}
+
+/* 单双周标识 */
+.week-type-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-bottom-right-radius: 6px;
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+  z-index: 2;
 }
 
 .course-block:hover .campus-badge {
@@ -1628,6 +1640,11 @@ export default {
     font-size: 8px;
     padding: 1px 4px;
   }
+
+  .week-type-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
   
   .course-name-text {
     font-size: 10px;
@@ -1699,6 +1716,11 @@ export default {
   }
   
   .campus-badge {
+    font-size: 7px;
+    padding: 1px 3px;
+  }
+
+  .week-type-badge {
     font-size: 7px;
     padding: 1px 3px;
   }
@@ -1814,6 +1836,11 @@ export default {
   }
   
   .campus-badge {
+    font-size: 7px;
+    padding: 1px 2px;
+  }
+
+  .week-type-badge {
     font-size: 7px;
     padding: 1px 2px;
   }

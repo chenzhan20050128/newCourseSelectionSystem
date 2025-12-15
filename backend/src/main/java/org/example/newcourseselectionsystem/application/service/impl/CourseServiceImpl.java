@@ -225,6 +225,7 @@ public class CourseServiceImpl implements CourseService {
         dto.setWeekday(session.getWeekday());
         dto.setStartPeriod(session.getStartPeriod());
         dto.setEndPeriod(session.getEndPeriod());
+        dto.setWeekType(session.getWeekType());
         return dto;
     }
 

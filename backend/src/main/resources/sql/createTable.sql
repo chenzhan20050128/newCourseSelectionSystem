@@ -20,8 +20,8 @@ CREATE TABLE courses (
     course_name     VARCHAR(128) NOT NULL,
     credits         INT NOT NULL,
     description     VARCHAR(255),
-    college         VARCHAR(64) NOT NULL,
-    instructor_name VARCHAR(64) NOT NULL,
+    college         VARCHAR(255) NOT NULL,
+    instructor_name VARCHAR(255) NOT NULL,
     campus          VARCHAR(64) NOT NULL,
     classroom       VARCHAR(64) NOT NULL,
     start_week      INT NOT NULL,
@@ -37,7 +37,8 @@ CREATE TABLE course_sessions (
     course_id     BIGINT NOT NULL,
     weekday       VARCHAR(16) NOT NULL,
     start_period  INT NOT NULL,
-    end_period    INT NOT NULL
+    end_period    INT NOT NULL,
+    week_type     INT NOT NULL DEFAULT 0 COMMENT '0:全周, 1:单周, 2:双周'
 );
 
 CREATE TABLE elective_batches (

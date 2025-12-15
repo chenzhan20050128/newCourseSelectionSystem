@@ -22,4 +22,6 @@ public class CourseSession {
     private Integer startPeriod;
 
     private Integer endPeriod;
+
+    private Integer weekType; // 0: 全周, 1: 单周, 2: 双周
 }
