@@ -12,6 +12,13 @@
       <div class="header-actions">
         <button 
           class="btn-list-view" 
+          @click="fetchRecommendations"
+          :disabled="loading || !studentId"
+        >
+          查看选课建议
+        </button>
+        <button 
+          class="btn-list-view" 
           @click="showCourseList = true"
           :disabled="loading || !studentId || courses.length === 0"
         >
@@ -316,12 +323,77 @@
         </div>
       </div>
     </div>
+
+    <!-- 选课建议对话框 -->
+    <div v-if="showRecommendations" class="dialog-overlay" @click="showRecommendations = false">
+      <div class="dialog-content available-courses-dialog" @click.stop>
+        <button class="dialog-close" @click="showRecommendations = false">×</button>
+        <div class="dialog-header">
+          <h3>选课建议</h3>
+        </div>
+        <div class="dialog-body">
+          <div v-if="loadingRecommendations" class="loading">
+            获取建议中...
+          </div>
+          <div v-else-if="recommendationsError" class="error-message">
+            {{ recommendationsError }}
+          </div>
+          <div v-else-if="!recommendations || recommendations.length === 0" class="no-results">
+            暂无选课建议
+          </div>
+          <div v-else class="available-courses-list">
+            <div v-for="group in recommendations" :key="group.category" class="recommendation-group">
+              <h4 class="category-title">{{ group.category }}</h4>
+              <div v-for="course in group.courses" :key="course.courseId" class="course-card">
+                <div class="course-header">
+                  <span class="course-id">ID: {{ course.courseId }}</span>
+                  <span class="course-name">{{ course.courseName }}</span>
+                  <span class="credits">{{ course.credits }} 学分</span>
+                </div>
+                <div class="course-info">
+                  <p><strong>学院:</strong> {{ course.college }}</p>
+                  <p><strong>校区:</strong> {{ course.campus }}</p>
+                  <p><strong>教室:</strong> {{ course.classroom }}</p>
+                  <p><strong>教师ID:</strong> {{ course.instructorId }}</p>
+                  <p><strong>周次:</strong> 第{{ course.startWeek }}周 - 第{{ course.endWeek }}周</p>
+                  <p v-if="course.description"><strong>描述:</strong> {{ course.description }}</p>
+                </div>
+                <div v-if="course.sessions && course.sessions.length > 0" class="sessions">
+                  <strong>上课时间:</strong>
+                  <ul>
+                    <li v-for="session in course.sessions" :key="session.sessionId">
+                      {{ session.weekday }} 第{{ session.startPeriod }}-{{ session.endPeriod }}节
+                    </li>
+                  </ul>
+                </div>
+                <div v-if="operationMessage[course.courseId]" 
+                     :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
+                  {{ operationMessage[course.courseId].message }}
+                </div>
+                <div class="course-actions">
+                  <p class="capacity-info">
+                    <strong>容量:</strong> {{ course.enrolledCount || 0 }}/{{ course.capacity }}
+                  </p>
+                  <button 
+                    class="btn-enroll"
+                    @click="handleEnrollFromDialog(course)"
+                    :disabled="!studentId || enrollingCourses.has(course.courseId)"
+                  >
+                    {{ enrollingCourses.has(course.courseId) ? '选课中...' : '选课' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, computed, inject, watch, onMounted } from 'vue'
-import { getStudentCourses, dropCourse, searchCoursesBySession, enrollCourse } from '../api/courseApi'
+import { getStudentCourses, dropCourse, searchCoursesBySession, enrollCourse, getRecommendations } from '../api/courseApi'
 
 export default {
   name: 'MyCourses',
@@ -348,6 +420,46 @@ export default {
     const queryTimeInfo = ref('')
     const queryWeekday = ref('')
     const queryPeriod = ref(null)
+    
+    // 选课建议相关状态
+    const showRecommendations = ref(false)
+    const recommendations = ref([])
+    const loadingRecommendations = ref(false)
+    const recommendationsError = ref('')
+
+    const fetchRecommendations = async () => {
+      if (!studentId.value) return
+      
+      loadingRecommendations.value = true
+      recommendationsError.value = ''
+      showRecommendations.value = true
+      
+      try {
+        const data = await getRecommendations({ studentId: parseInt(studentId.value) })
+        // 后端返回的数据结构是 { studentId: ..., recommendations: { "类别": [课程列表], ... } }
+        // 我们需要将 recommendations 对象转换为数组格式以便遍历
+        if (data && data.recommendations) {
+          const recs = []
+          for (const [category, courses] of Object.entries(data.recommendations)) {
+            if (courses && courses.length > 0) {
+              recs.push({
+                category,
+                courses
+              })
+            }
+          }
+          recommendations.value = recs
+        } else {
+          recommendations.value = []
+        }
+      } catch (err) {
+        console.error('获取选课建议失败:', err)
+        recommendationsError.value = err.message || '获取选课建议失败'
+      } finally {
+        loadingRecommendations.value = false
+      }
+    }
+
     const enrollingCourses = ref(new Set())
     
     // 确认对话框状态
@@ -842,7 +954,7 @@ export default {
         loading.value = false
       }
     }
-    
+
     /**
      * 处理退课
      */
@@ -954,7 +1066,12 @@ export default {
       confirmDialogInfo,
       confirmSearchCourses,
       cancelSearchCourses,
-      isShowingConfirm
+      isShowingConfirm,
+      showRecommendations,
+      recommendations,
+      loadingRecommendations,
+      recommendationsError,
+      fetchRecommendations
     }
   }
 }
@@ -2071,5 +2188,17 @@ export default {
     top: 8px;
     right: 8px;
   }
+}
+
+.category-title {
+  margin: 20px 0 10px;
+  padding-left: 10px;
+  border-left: 4px solid #7C1F89;
+  color: #333;
+  font-size: 18px;
+}
+
+.recommendation-group:first-child .category-title {
+  margin-top: 0;
 }
 </style>
