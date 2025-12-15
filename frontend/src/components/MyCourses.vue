@@ -354,7 +354,7 @@
                   <p><strong>学院:</strong> {{ course.college }}</p>
                   <p><strong>校区:</strong> {{ course.campus }}</p>
                   <p><strong>教室:</strong> {{ course.classroom }}</p>
-                  <p><strong>教师ID:</strong> {{ course.instructorId }}</p>
+                  <p><strong>教师:</strong> {{ course.instructorName }}</p>
                   <p><strong>周次:</strong> 第{{ course.startWeek }}周 - 第{{ course.endWeek }}周</p>
                   <p v-if="course.description"><strong>描述:</strong> {{ course.description }}</p>
                 </div>
