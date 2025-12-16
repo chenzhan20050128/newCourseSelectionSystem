@@ -15,4 +15,6 @@ public class CourseSessionDTO {
     private Integer startPeriod;
 
     private Integer endPeriod;
+
+    private Integer weekType;
 }

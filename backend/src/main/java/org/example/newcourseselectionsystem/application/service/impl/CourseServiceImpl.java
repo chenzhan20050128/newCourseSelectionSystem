@@ -11,8 +11,10 @@ import org.example.newcourseselectionsystem.application.request.CombinedCourseQu
 import org.example.newcourseselectionsystem.application.service.CourseService;
 import org.example.newcourseselectionsystem.domain.entity.Course;
 import org.example.newcourseselectionsystem.domain.entity.CourseSession;
+import org.example.newcourseselectionsystem.domain.entity.Enrollment;
 import org.example.newcourseselectionsystem.infrastructure.mapper.CourseMapper;
 import org.example.newcourseselectionsystem.infrastructure.mapper.CourseSessionMapper;
+import org.example.newcourseselectionsystem.infrastructure.mapper.EnrollmentMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -31,6 +33,7 @@ public class CourseServiceImpl implements CourseService {
 
     private final CourseMapper courseMapper;
     private final CourseSessionMapper courseSessionMapper;
+    private final EnrollmentMapper enrollmentMapper;
 
     @Override
     public List<CourseWithSessionsDTO> searchCourses(CombinedCourseQueryRequest request) {
@@ -39,6 +42,7 @@ public class CourseServiceImpl implements CourseService {
         }
         CourseQueryRequest courseCond = request.getCourseCondition();
         SessionQueryRequest sessionCond = request.getSessionCondition();
+        Long studentId = request.getStudentId();
 
         List<Long> candidateCourseIds = null;
         List<Course> candidateCourses = Collections.emptyList();
@@ -53,34 +57,26 @@ public class CourseServiceImpl implements CourseService {
             candidateCourseIds = candidateCourses.stream().map(Course::getCourseId).collect(Collectors.toList());
         }
 
-        // 2) 再处理节次条件（如果有）
+        // 2) 再处理节次条件（如果有）并与课程候选集合求交集或并集
         if (sessionCond != null) {
-            Integer start = sessionCond.getStartPeriod();
-            Integer end = sessionCond.getEndPeriod();
-            if (start != null && end != null && start > end) {
-                int tmp = start; start = end; end = tmp;
-            }
             LambdaQueryWrapper<CourseSession> sessionWrapper = new LambdaQueryWrapper<>();
-            if (!CollectionUtils.isEmpty(sessionCond.getWeekdays())) {
+            if (sessionCond.getWeekdays() != null && !sessionCond.getWeekdays().isEmpty()) {
                 sessionWrapper.in(CourseSession::getWeekday, sessionCond.getWeekdays());
             }
-            sessionWrapper.le(start != null, CourseSession::getStartPeriod, start)
-                           .ge(end != null, CourseSession::getEndPeriod, end);
-
-            // 如果已经有候选课程ID，则加上范围过滤
-            if (!CollectionUtils.isEmpty(candidateCourseIds)) {
-                sessionWrapper.in(CourseSession::getCourseId, candidateCourseIds);
+            // 希望课程节次区间覆盖查询区间：[start,end] 被课程区间包含
+            if (sessionCond.getStartPeriod() != null) {
+                sessionWrapper.le(CourseSession::getStartPeriod, sessionCond.getStartPeriod());
             }
-
-            List<Long> matchedIds = courseSessionMapper.selectList(sessionWrapper).stream()
-                    .map(CourseSession::getCourseId)
-                    .distinct()
-                    .collect(Collectors.toList());
-            if (CollectionUtils.isEmpty(matchedIds)) {
+            if (sessionCond.getEndPeriod() != null) {
+                sessionWrapper.ge(CourseSession::getEndPeriod, sessionCond.getEndPeriod());
+            }
+            List<CourseSession> matchedSessions = courseSessionMapper.selectList(sessionWrapper);
+            if (CollectionUtils.isEmpty(matchedSessions)) {
                 return Collections.emptyList();
             }
+            List<Long> matchedIds = matchedSessions.stream().map(CourseSession::getCourseId).distinct().collect(Collectors.toList());
 
-            if (CollectionUtils.isEmpty(candidateCourseIds)) {
+            if (candidateCourseIds == null) {
                 // 只有节次条件：候选ID = 节次匹配ID
                 candidateCourseIds = matchedIds;
                 candidateCourses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, candidateCourseIds));
@@ -101,9 +97,29 @@ public class CourseServiceImpl implements CourseService {
         }
 
         Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(candidateCourseIds);
+
+        // 预先查询该学生已选的课程ID集合（仅当提供了studentId）
+        Set<Long> enrolledCourseIds = Collections.emptySet();
+        if (studentId != null) {
+            LambdaQueryWrapper<Enrollment> enrollmentWrapper = new LambdaQueryWrapper<>();
+            enrollmentWrapper.eq(Enrollment::getStudentId, studentId)
+                    .eq(Enrollment::getStatus, "已选");
+            List<Enrollment> enrollments = enrollmentMapper.selectList(enrollmentWrapper);
+            enrolledCourseIds = enrollments.stream().map(Enrollment::getCourseId).collect(Collectors.toSet());
+        }
+
+        Set<Long> finalEnrolledCourseIds = enrolledCourseIds; // effectively final for lambda
         return candidateCourses.stream()
-                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
-                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
+                .map(course -> {
+                    CourseWithSessionsDTO dto = assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                            course.getEnrolledCount() != null ? course.getEnrolledCount() : 0);
+                    if (studentId != null) {
+                        dto.setIsEnrolled(finalEnrolledCourseIds.contains(course.getCourseId()));
+                    } else {
+                        dto.setIsEnrolled(null);
+                    }
+                    return dto;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -131,23 +147,32 @@ public class CourseServiceImpl implements CourseService {
         if (request == null) {
             return Collections.emptyList();
         }
-        // 查询的节次范围应该被课程节次范围包含（包含关系）
-        LambdaQueryWrapper<CourseSession> wrapper = new LambdaQueryWrapper<>();
-        Integer start = request.getStartPeriod();
-        Integer end = request.getEndPeriod();
-        if (start != null && end != null && start > end) {
-            int temp = start; start = end; end = temp;
+        LambdaQueryWrapper<CourseSession> sessionWrapper = new LambdaQueryWrapper<>();
+        if (request.getWeekdays() != null && !request.getWeekdays().isEmpty()) {
+            sessionWrapper.in(CourseSession::getWeekday, request.getWeekdays());
         }
-        if (!CollectionUtils.isEmpty(request.getWeekdays())) {
-            wrapper.in(CourseSession::getWeekday, request.getWeekdays());
+        // 希望课程节次区间覆盖查询区间：[start,end] 被课程区间包含
+        if (request.getStartPeriod() != null) {
+            sessionWrapper.le(CourseSession::getStartPeriod, request.getStartPeriod());
         }
-        wrapper.le(start != null, CourseSession::getStartPeriod, start)
-               .ge(end != null, CourseSession::getEndPeriod, end);
-
-        List<Long> courseIds = courseSessionMapper.selectList(wrapper).stream()
-                .map(CourseSession::getCourseId)
-                .distinct()
+        if (request.getEndPeriod() != null) {
+            sessionWrapper.ge(CourseSession::getEndPeriod, request.getEndPeriod());
+        }
+        List<CourseSession> sessions = courseSessionMapper.selectList(sessionWrapper);
+        if (CollectionUtils.isEmpty(sessions)) {
+            return Collections.emptyList();
+        }
+        List<Long> courseIds = sessions.stream().map(CourseSession::getCourseId).distinct().collect(Collectors.toList());
+        List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>().in(Course::getCourseId, courseIds));
+        Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
+        return courses.stream()
+                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds) {
         if (CollectionUtils.isEmpty(courseIds)) {
             return Collections.emptyList();
         }
@@ -192,6 +217,16 @@ public class CourseServiceImpl implements CourseService {
                 .collect(Collectors.groupingBy(
                         CourseSession::getCourseId,
                         Collectors.mapping(this::convertSession, Collectors.toList())));
+    }
+
+    private CourseSessionDTO convertSession(CourseSession session) {
+        CourseSessionDTO dto = new CourseSessionDTO();
+        dto.setSessionId(session.getSessionId());
+        dto.setWeekday(session.getWeekday());
+        dto.setStartPeriod(session.getStartPeriod());
+        dto.setEndPeriod(session.getEndPeriod());
+        dto.setWeekType(session.getWeekType());
+        return dto;
     }
 
     private CourseWithSessionsDTO assembleCourseDTO(Course course, List<CourseSessionDTO> sessions,
@@ -255,14 +290,5 @@ public class CourseServiceImpl implements CourseService {
         } catch (Exception e) {
             throw new IllegalArgumentException("无效的属性名称: " + attributeName, e);
         }
-    }
-
-    private CourseSessionDTO convertSession(CourseSession session) {
-        CourseSessionDTO dto = new CourseSessionDTO();
-        dto.setSessionId(session.getSessionId());
-        dto.setWeekday(session.getWeekday());
-        dto.setStartPeriod(session.getStartPeriod());
-        dto.setEndPeriod(session.getEndPeriod());
-        return dto;
     }
 }

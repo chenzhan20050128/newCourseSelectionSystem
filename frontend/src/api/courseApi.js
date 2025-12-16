@@ -49,6 +49,15 @@ export function searchCourses(queryRequest) {
 }
 
 /**
+ * 获取选课建议
+ * @param {Object} data - 请求数据 { studentId: number }
+ * @returns {Promise<Array>} 推荐课程列表
+ */
+export function getRecommendations(data) {
+  return api.post('/graduation/recommendations', data)
+}
+
+/**
  * 综合查询课程（课程条件 + 节次条件）
  * @param {Object} combinedRequest - 综合查询请求对象
  * @returns {Promise<Array>} 课程列表

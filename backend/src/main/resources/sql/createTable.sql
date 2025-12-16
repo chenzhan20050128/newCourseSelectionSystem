@@ -14,27 +14,31 @@ CREATE TABLE students (
     password      VARCHAR(128) NOT NULL
 );
 
+-- 课程表，新增type字段用于毕业要求分类
 CREATE TABLE courses (
-    course_id     BIGINT PRIMARY KEY,
-    course_name   VARCHAR(128) NOT NULL,
-    credits       INT NOT NULL,
-    description   VARCHAR(255),
-    college       VARCHAR(64) NOT NULL,
-    instructor_name VARCHAR(64) NOT NULL,
-    campus        VARCHAR(64) NOT NULL,
-    classroom     VARCHAR(64) NOT NULL,
-    start_week    INT NOT NULL,
-    end_week      INT NOT NULL,
-    capacity      INT NOT NULL COMMENT '课程容量，与enrolled_count（已选人数）一起用于判断课程是否已满',
-    enrolled_count INT NOT NULL DEFAULT 0 COMMENT '已选人数，与capacity（课程容量）一起用于判断课程是否已满'
+    course_id       BIGINT PRIMARY KEY AUTO_INCREMENT,
+    course_name     VARCHAR(128) NOT NULL,
+    credits         INT NOT NULL,
+    description     VARCHAR(255),
+    college         VARCHAR(255) NOT NULL,
+    instructor_name VARCHAR(255) NOT NULL,
+    campus          VARCHAR(64) NOT NULL,
+    classroom       VARCHAR(64) NOT NULL,
+    start_week      INT NOT NULL,
+    end_week        INT NOT NULL,
+    capacity        INT NOT NULL COMMENT '课程容量，与enrolled_count（已选人数）一起用于判断课程是否已满',
+    enrolled_count  INT NOT NULL DEFAULT 0 COMMENT '已选人数，与capacity（课程容量）一起用于判断课程是否已满',
+    type            VARCHAR(50) NULL COMMENT '课程类型，用于毕业要求分类'
 );
 
+-- 课程节次表
 CREATE TABLE course_sessions (
     session_id    BIGINT PRIMARY KEY AUTO_INCREMENT,
     course_id     BIGINT NOT NULL,
     weekday       VARCHAR(16) NOT NULL,
     start_period  INT NOT NULL,
-    end_period    INT NOT NULL
+    end_period    INT NOT NULL,
+    week_type     INT NOT NULL DEFAULT 0 COMMENT '0:全周, 1:单周, 2:双周'
 );
 
 CREATE TABLE elective_batches (
