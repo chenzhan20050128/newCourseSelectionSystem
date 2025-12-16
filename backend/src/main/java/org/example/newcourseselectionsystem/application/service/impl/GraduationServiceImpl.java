@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.example.newcourseselectionsystem.application.dto.CourseRecommendationResponse;
 import org.example.newcourseselectionsystem.application.dto.CourseWithSessionsDTO;
+import org.example.newcourseselectionsystem.application.dto.CreditProgressDTO;
 import org.example.newcourseselectionsystem.application.dto.GraduationStatusResponse;
 import org.example.newcourseselectionsystem.application.dto.TypeCreditDeficitDTO;
 import org.example.newcourseselectionsystem.application.request.GraduationQueryRequest;
@@ -34,7 +35,8 @@ public class GraduationServiceImpl implements GraduationService {
     public GraduationStatusResponse getStatus(GraduationQueryRequest request) {
         Long studentId = request.getStudentId();
         List<Enrollment> enrollments = enrollmentMapper.selectList(new LambdaQueryWrapper<Enrollment>()
-                .eq(Enrollment::getStudentId, studentId));
+                .eq(Enrollment::getStudentId, studentId)
+                .eq(Enrollment::getStatus, "已修"));
         // Treat all entries in enrollments as earned credits per user instruction
         Set<Long> courseIds = enrollments.stream().map(Enrollment::getCourseId).collect(Collectors.toSet());
         if (courseIds.isEmpty()) {
@@ -75,7 +77,8 @@ public class GraduationServiceImpl implements GraduationService {
 
         Map<String, List<CourseWithSessionsDTO>> recs = new LinkedHashMap<>();
         Set<Long> alreadyCourseIds = enrollmentMapper.selectList(new LambdaQueryWrapper<Enrollment>()
-                .eq(Enrollment::getStudentId, request.getStudentId()))
+                .eq(Enrollment::getStudentId, request.getStudentId())
+                .in(Enrollment::getStatus, Arrays.asList("已修", "已选")))
                 .stream().map(Enrollment::getCourseId).collect(Collectors.toSet());
 
         Random rand = new Random();
@@ -98,6 +101,13 @@ public class GraduationServiceImpl implements GraduationService {
             List<CourseWithSessionsDTO> dtos = courseService.listCoursesByIds(candidateIds);
             recs.put(d.getType(), dtos);
         }
-        return new CourseRecommendationResponse(request.getStudentId(), recs);
+
+        // 构建学分进度列表
+        List<CreditProgressDTO> creditProgress = new ArrayList<>();
+        for (TypeCreditDeficitDTO d : status.getDeficits()) {
+            creditProgress.add(new CreditProgressDTO(d.getType(), d.getEarnedCredits(), d.getRequiredCredits()));
+        }
+
+        return new CourseRecommendationResponse(request.getStudentId(), recs, creditProgress);
     }
 }
