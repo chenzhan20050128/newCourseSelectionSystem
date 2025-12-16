@@ -12,5 +12,7 @@ import java.util.Map;
 public class CourseRecommendationResponse {
     private Long studentId;
     private Map<String, List<CourseWithSessionsDTO>> recommendations;
+    //新增学分进度
+    private List<CreditProgressDTO> creditProgress;
 }
 

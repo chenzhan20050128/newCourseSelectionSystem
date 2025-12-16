@@ -325,69 +325,112 @@
     </div>
 
     <!-- 选课建议对话框 -->
-    <div v-if="showRecommendations" class="dialog-overlay" @click="showRecommendations = false">
-      <div class="dialog-content available-courses-dialog" @click.stop>
-        <button class="dialog-close" @click="showRecommendations = false">×</button>
-        <div class="dialog-header">
-          <h3>选课建议</h3>
-        </div>
-        <div class="dialog-body">
-          <div v-if="loadingRecommendations" class="loading">
-            获取建议中...
-          </div>
-          <div v-else-if="recommendationsError" class="error-message">
-            {{ recommendationsError }}
-          </div>
-          <div v-else-if="!recommendations || recommendations.length === 0" class="no-results">
-            暂无选课建议
-          </div>
-          <div v-else class="available-courses-list">
-            <div v-for="group in recommendations" :key="group.category" class="recommendation-group">
-              <h4 class="category-title">{{ group.category }}</h4>
-              <div v-for="course in group.courses" :key="course.courseId" class="course-card">
-                <div class="course-header">
-                  <span class="course-id">ID: {{ course.courseId }}</span>
-                  <span class="course-name">{{ course.courseName }}</span>
-                  <span class="credits">{{ course.credits }} 学分</span>
-                </div>
-                <div class="course-info">
-                  <p><strong>学院:</strong> {{ course.college }}</p>
-                  <p><strong>校区:</strong> {{ course.campus }}</p>
-                  <p><strong>教室:</strong> {{ course.classroom }}</p>
-                  <p><strong>教师:</strong> {{ course.instructorName }}</p>
-                  <p><strong>周次:</strong> 第{{ course.startWeek }}周 - 第{{ course.endWeek }}周</p>
-                  <p v-if="course.description"><strong>描述:</strong> {{ course.description }}</p>
-                </div>
-                <div v-if="course.sessions && course.sessions.length > 0" class="sessions">
-                  <strong>上课时间:</strong>
-                  <ul>
-                    <li v-for="session in course.sessions" :key="session.sessionId">
-                      {{ session.weekday }} 第{{ session.startPeriod }}-{{ session.endPeriod }}节
-                    </li>
-                  </ul>
-                </div>
-                <div v-if="operationMessage[course.courseId]" 
-                     :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
-                  {{ operationMessage[course.courseId].message }}
-                </div>
-                <div class="course-actions">
-                  <p class="capacity-info">
-                    <strong>容量:</strong> {{ course.enrolledCount || 0 }}/{{ course.capacity }}
-                  </p>
-                  <button 
-                    class="btn-enroll"
-                    @click="handleEnrollFromDialog(course)"
-                    :disabled="!studentId || enrollingCourses.has(course.courseId)"
-                  >
-                    {{ enrollingCourses.has(course.courseId) ? '选课中...' : '选课' }}
-                  </button>
+        <div v-if="showRecommendations" class="dialog-overlay" @click="showRecommendations = false">
+          <div class="dialog-content available-courses-dialog" @click.stop>
+            <button class="dialog-close" @click="showRecommendations = false">×</button>
+            <div class="dialog-header">
+              <h3>学分进度与选课建议</h3>
+            </div>
+            <div class="dialog-body">
+              <div v-if="loadingRecommendations" class="loading">
+                获取建议中...
+              </div>
+              <div v-else-if="recommendationsError" class="error-message">
+                {{ recommendationsError }}
+              </div>
+              <div v-else-if="!creditProgress || creditProgress.length === 0" class="no-results">
+                暂无进度数据
+              </div>
+              
+              <!-- 新的布局：进度条列表 -->
+              <div v-else class="progress-list">
+                <div v-for="item in creditProgress" :key="item.type" class="progress-item-container">
+                  
+                  <!-- 进度条行 -->
+                  <div class="progress-row">
+                    <div class="progress-label">{{ item.type }}</div>
+                    
+                    <div class="progress-track-wrapper">
+                      <div class="progress-track">
+                        <div 
+                          class="progress-bar"
+                          :class="{ 'bar-green': item.earned >= item.required, 'bar-red': item.earned < item.required }"
+                          :style="{ width: getProgressPercent(item.earned, item.required) + '%' }"
+                        ></div>
+                      </div>
+                    </div>
+
+                    <!-- 进度数值 (仅未完成时显示) -->
+                    <div class="progress-value">
+                      <span v-if="item.earned < item.required">
+                        {{ item.earned }}/{{ item.required }}
+                      </span>
+                      <span v-else class="status-ok">
+                        已完成
+                      </span>
+                    </div>
+
+                    <!-- 操作按钮 (仅未完成且有推荐课程时显示) -->
+                    <div class="progress-action">
+                      <button 
+                        v-if="item.earned < item.required" 
+                        class="btn-recommend"
+                        @click="toggleCategory(item.type)"
+                      >
+                        {{ expandedCategory === item.type ? '收起' : '推荐课程' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- 展开的推荐课程列表 -->
+                  <div v-if="expandedCategory === item.type" class="recommendation-dropdown">
+                    
+                    <div v-if="!recommendations[item.type] || recommendations[item.type].length === 0" class="no-recs-hint">
+                      该类别暂无推荐课程
+                    </div>
+
+                    <div v-else class="course-grid">
+                      <!-- 复用之前的课程卡片样式，稍微调整布局 -->
+                      <div v-for="course in recommendations[item.type]" :key="course.courseId" class="course-card mini-card">
+                        <div class="course-header">
+                          <span class="course-name">{{ course.courseName }}</span>
+                          <span class="credits">{{ course.credits }} 分</span>
+                        </div>
+                        <div class="course-info compact">
+                          <p><strong>教师:</strong> {{ course.instructorName }}</p>
+                          <p><strong>时间:</strong> 
+                            <span v-for="(session, idx) in course.sessions" :key="idx">
+                              {{ session.weekday }}{{ session.startPeriod }}-{{ session.endPeriod }} 
+                            </span>
+                          </p>
+                          <p><strong>容量:</strong> {{ course.enrolledCount }}/{{ course.capacity }}</p>
+                        </div>
+                        
+                        <!-- 操作反馈消息 -->
+                        <div v-if="operationMessage[course.courseId]" 
+                            :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
+                          {{ operationMessage[course.courseId].message }}
+                        </div>
+
+                        <div class="course-actions">
+                          <button 
+                            class="btn-enroll small"
+                            @click="handleEnrollFromDialog(course)"
+                            :disabled="!studentId || enrollingCourses.has(course.courseId)"
+                          >
+                            {{ enrollingCourses.has(course.courseId) ? '...' : '选课' }}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
+
             </div>
           </div>
         </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -426,6 +469,10 @@ export default {
     const recommendations = ref([])
     const loadingRecommendations = ref(false)
     const recommendationsError = ref('')
+    // 新增：学分进度数据
+    const creditProgress = ref([])
+    // 新增：当前展开的推荐课程分类（控制显示哪个分类的课程列表）
+    const expandedCategory = ref('')
 
     const fetchRecommendations = async () => {
       if (!studentId.value) return
@@ -433,25 +480,28 @@ export default {
       loadingRecommendations.value = true
       recommendationsError.value = ''
       showRecommendations.value = true
+      // 重置状态
+      expandedCategory.value = ''
       
       try {
         const data = await getRecommendations({ studentId: parseInt(studentId.value) })
-        // 后端返回的数据结构是 { studentId: ..., recommendations: { "类别": [课程列表], ... } }
-        // 我们需要将 recommendations 对象转换为数组格式以便遍历
-        if (data && data.recommendations) {
-          const recs = []
-          for (const [category, courses] of Object.entries(data.recommendations)) {
-            if (courses && courses.length > 0) {
-              recs.push({
-                category,
-                courses
-              })
-            }
-          }
-          recommendations.value = recs
+        
+        // 1. 处理学分进度
+        if (data && data.creditProgress) {
+          creditProgress.value = data.creditProgress
         } else {
-          recommendations.value = []
+          creditProgress.value = []
         }
+
+        // 2. 处理推荐课程字典 (保持 Object 结构以便通过 key 查找)
+        // 注意：这里不需要像之前那样转成数组了，因为我们是通过点击进度条后的按钮，
+        // 根据 type 去这个对象里取数据的
+        if (data && data.recommendations) {
+          recommendations.value = data.recommendations
+        } else {
+          recommendations.value = {}
+        }
+
       } catch (err) {
         console.error('获取选课建议失败:', err)
         recommendationsError.value = err.message || '获取选课建议失败'
@@ -459,6 +509,23 @@ export default {
         loadingRecommendations.value = false
       }
     }
+
+    // 新增：切换展开/收起推荐课程
+    const toggleCategory = (categoryType) => {
+      if (expandedCategory.value === categoryType) {
+        expandedCategory.value = '' // 如果当前已展开，则收起
+      } else {
+        expandedCategory.value = categoryType // 展开新的
+      }
+    }
+
+    // 新增：计算进度百分比
+    const getProgressPercent = (earned, required) => {
+      if (required === 0) return 100
+      const percent = (earned / required) * 100
+      return Math.min(percent, 100) // 不超过100%
+    }
+
 
     const enrollingCourses = ref(new Set())
     
@@ -1071,6 +1138,10 @@ export default {
       recommendations,
       loadingRecommendations,
       recommendationsError,
+      creditProgress,
+      expandedCategory,
+      toggleCategory,
+      getProgressPercent,
       fetchRecommendations
     }
   }
@@ -2200,5 +2271,172 @@ export default {
 
 .recommendation-group:first-child .category-title {
   margin-top: 0;
+}
+
+/* 进度条列表样式 */
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 10px 5px;
+}
+
+.progress-item-container {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 15px;
+}
+
+.progress-item-container:last-child {
+  border-bottom: none;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  height: 40px;
+}
+
+.progress-label {
+  width: 100px; /* 固定宽度，对齐 */
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-track-wrapper {
+  flex: 1; /* 占据剩余空间 */
+  display: flex;
+  align-items: center;
+}
+
+.progress-track {
+  width: 100%;
+  height: 12px;
+  background-color: #e9ecef;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.bar-green {
+  background: linear-gradient(90deg, #52c41a 0%, #73d13d 100%);
+}
+
+.bar-red {
+  background: linear-gradient(90deg, #ff4d4f 0%, #ff7875 100%);
+}
+
+.progress-value {
+  width: 60px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+}
+
+.status-ok {
+  color: #52c41a;
+  font-size: 12px;
+}
+
+.progress-action {
+  width: 80px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-recommend {
+  padding: 4px 10px;
+  background-color: white;
+  color: #1890ff;
+  border: 1px solid #1890ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+
+.btn-recommend:hover {
+  background-color: #e6f7ff;
+}
+
+/* 推荐课程下拉区域 */
+.recommendation-dropdown {
+  margin-top: 15px;
+  background: #fcfcfc;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 15px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.no-recs-hint {
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  padding: 10px;
+}
+
+.course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 15px;
+}
+
+/* 迷你课程卡片样式调整 */
+.course-card.mini-card {
+  margin-bottom: 0;
+  padding: 12px;
+  background: white;
+  border: 1px solid #e8e8e8;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.course-card.mini-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: #1890ff;
+}
+
+.course-info.compact p {
+  margin: 3px 0;
+  font-size: 12px;
+}
+
+.btn-enroll.small {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* 移动端适配调整 */
+@media (max-width: 600px) {
+  .progress-row {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 8px;
+  }
+  
+  .progress-label {
+    width: 100%;
+    margin-bottom: 4px;
+  }
+  
+  .progress-track-wrapper {
+    min-width: 150px;
+  }
 }
 </style>
