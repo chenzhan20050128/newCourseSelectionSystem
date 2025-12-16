@@ -25,6 +25,7 @@ public final class GraduationRequirements {
         m.put("悦读", 1);
         m.put("科光", 1);
         m.put("通识课", 10);     // 14-2-1-1=10
+        
 
         // 学科专业课程
         m.put("学科基础课程", 64);  // 准入+准出课程
