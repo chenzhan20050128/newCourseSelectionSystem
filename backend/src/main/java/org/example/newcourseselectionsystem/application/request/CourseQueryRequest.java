@@ -29,4 +29,6 @@ public class CourseQueryRequest {
     private Integer endWeek;
 
     private Integer capacity;
+
+    private String type; // 新增字段：课程类型，用于毕业要求分类
 }

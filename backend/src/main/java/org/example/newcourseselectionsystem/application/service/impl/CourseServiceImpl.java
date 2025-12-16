@@ -204,6 +204,7 @@ public class CourseServiceImpl implements CourseService {
         wrapper.ge(request.getStartWeek() != null, Course::getStartWeek, request.getStartWeek());
         wrapper.le(request.getEndWeek() != null, Course::getEndWeek, request.getEndWeek());
         wrapper.eq(request.getCapacity() != null, Course::getCapacity, request.getCapacity());
+        wrapper.eq(StringUtils.hasText(request.getType()), Course::getType, request.getType()); // 新增筛选条件：按课程类型过滤
         return wrapper;
     }
 
