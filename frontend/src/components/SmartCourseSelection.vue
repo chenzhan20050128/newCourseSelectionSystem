@@ -1,9 +1,9 @@
 <template>
   <div class="smart-course-selection">
-    <div class="header">
+    <!-- <div class="header">
       <h2>智能选课</h2>
       <p class="subtitle">AI 智能推荐适合您的课程</p>
-    </div>
+    </div> -->
 
     <div v-if="!studentId" class="no-student-id">
       <p>请先在上方输入学生ID</p>

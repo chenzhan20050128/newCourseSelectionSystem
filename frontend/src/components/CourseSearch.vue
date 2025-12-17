@@ -37,7 +37,7 @@
           v-for="course in results" 
           :key="course.courseId" 
           :course="course"
-          :student-id="studentId"
+          :student-id="studentIdValue"
           :is-enrolling="enrollingCourses.has(course.courseId)"
           :is-dropping="droppingCourses.has(course.courseId)"
           :message="operationMessage[course.courseId]"
@@ -54,7 +54,7 @@
 </template>
 
 <script>
-import { ref, reactive, watch, onMounted, onUnmounted, inject } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, inject, computed } from 'vue'
 import { searchCombinedCourses, enrollCourse, dropCourse } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import SearchForm from './SearchForm.vue'
@@ -68,6 +68,29 @@ export default {
   setup() {
     // 获取学生ID
     const studentId = inject('studentId')
+
+    // 解析 studentId：优先使用 provide/inject，其次从 storage / user 信息兜底
+    const resolveStudentId = () => {
+      const injected = studentId?.value
+      const fromStorage = sessionStorage.getItem('studentId') || localStorage.getItem('studentId')
+
+      let fromUser = null
+      try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          fromUser = JSON.parse(userStr)?.userId
+        }
+      } catch (e) {
+        fromUser = null
+      }
+
+      const raw = injected ?? fromStorage ?? fromUser
+      if (raw === null || raw === undefined || raw === '') return null
+      const num = Number(raw)
+      return Number.isFinite(num) ? num : null
+    }
+
+    const studentIdValue = computed(() => resolveStudentId())
     
     const results = ref([])
     const loading = ref(false)
@@ -89,6 +112,12 @@ export default {
         const combinedRequest = {
           courseCondition: null,
           sessionCondition: null
+        }
+
+        // 让后端能够标记 isEnrolled：带上 studentId（Long）
+        const numericStudentId = studentIdValue.value
+        if (numericStudentId !== null) {
+          combinedRequest.studentId = numericStudentId
         }
 
         // 1. 构建 courseCondition
@@ -141,11 +170,36 @@ export default {
       operationMessage.value = {}
     }
 
+    // 默认加载：自动查询一次（无条件时返回全部课程），并携带 studentId
+    const autoLoaded = ref(false)
+    const tryAutoLoad = async () => {
+      if (autoLoaded.value) return
+      autoLoaded.value = true
+      await handleSearch({})
+    }
+
+    onMounted(() => {
+      // 直接触发一次默认查询；studentId 通过 resolveStudentId() 从 storage/user 兜底
+      tryAutoLoad()
+    })
+
+    // 如果页面首次渲染时 user 还没读入，studentId 可能晚一点才有；此处保证一旦出现也会触发默认查询
+    watch(
+      () => studentId?.value,
+      (newVal, oldVal) => {
+        if (autoLoaded.value) return
+        if (newVal !== null && newVal !== undefined && newVal !== '') {
+          tryAutoLoad()
+        }
+      }
+    )
+
     /**
      * 处理选课
      */
     const handleEnroll = async (course) => {
-      if (!studentId.value) {
+      const numericStudentId = studentIdValue.value
+      if (!numericStudentId) {
         setOperationMessage(course.courseId, 'error', '请先输入学生ID')
         return
       }
@@ -187,7 +241,7 @@ export default {
 
       try {
         const response = await enrollCourse({
-          studentId: studentId.value,
+          studentId: numericStudentId,
           courseId: course.courseId,
           batchId: Number(batchId)
         })
@@ -200,6 +254,7 @@ export default {
             }, 2000)
           }
           course.enrolledCount = (course.enrolledCount || 0) + 1
+          course.isEnrolled = true
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -215,7 +270,8 @@ export default {
      * 处理退课
      */
     const handleDrop = async (course) => {
-      if (!studentId.value) {
+      const numericStudentId = studentIdValue.value
+      if (!numericStudentId) {
         setOperationMessage(course.courseId, 'error', '请先输入学生ID')
         return
       }
@@ -225,13 +281,14 @@ export default {
 
       try {
         const response = await dropCourse({
-          studentId: studentId.value,
+          studentId: numericStudentId,
           courseId: course.courseId
         })
 
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
           course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
+          course.isEnrolled = false
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -258,6 +315,7 @@ export default {
 
     return {
       studentId,
+      studentIdValue,
       results,
       loading,
       error,

@@ -33,7 +33,8 @@
         {{ message.message }}
       </div>
       <div class="action-buttons">
-        <button 
+        <button
+          v-if="!course.isEnrolled"
           class="btn btn-enroll"
           @click="$emit('enroll', course)"
           :disabled="!canEnroll"
@@ -41,7 +42,8 @@
         >
           {{ isEnrolling ? '...' : '选课' }}
         </button>
-        <button 
+        <button
+          v-else
           class="btn btn-drop"
           @click="$emit('drop', course)"
           :disabled="!canDrop"
@@ -100,11 +102,11 @@ export default {
     })
 
     const canEnroll = computed(() => {
-      return props.studentId && !props.isEnrolling && !isFull.value
+      return props.studentId && !props.course?.isEnrolled && !props.isEnrolling && !isFull.value
     })
 
     const canDrop = computed(() => {
-      return props.studentId && !props.isDropping
+      return props.studentId && !!props.course?.isEnrolled && !props.isDropping
     })
 
     return {

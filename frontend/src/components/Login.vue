@@ -157,6 +157,13 @@ export default {
           localStorage.setItem('user', JSON.stringify(response.data.user));
           localStorage.setItem('token', response.data.token);
           localStorage.setItem('selectedBatchId', this.selectedBatchId);
+
+          // 保存 studentId（后端返回的 user.userId 即 studentId）
+          const studentId = response.data.user?.userId;
+          if (studentId !== null && studentId !== undefined && studentId !== '') {
+            localStorage.setItem('studentId', String(studentId));
+            sessionStorage.setItem('studentId', String(studentId));
+          }
           
           // 保存选中的轮次信息
           const selectedBatch = this.electiveBatches.find(

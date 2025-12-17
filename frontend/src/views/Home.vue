@@ -281,6 +281,8 @@ export default {
         localStorage.removeItem('token');
         localStorage.removeItem('selectedBatch');
         localStorage.removeItem('selectedBatchId');
+        localStorage.removeItem('studentId');
+        sessionStorage.removeItem('studentId');
         // 跳转到登录页
         router.push('/login');
       }

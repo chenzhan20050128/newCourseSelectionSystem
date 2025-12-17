@@ -179,7 +179,7 @@
             <strong>教室:</strong> {{ selectedCourse.classroom }}
           </div>
           <div class="detail-item">
-            <strong>教师ID:</strong> {{ selectedCourse.instructorId }}
+            <strong>教师:</strong> {{ selectedCourse.instructorName || '-' }}
           </div>
           <div class="detail-item">
             <strong>周次:</strong> 第{{ selectedCourse.startWeek }}周 - 第{{ selectedCourse.endWeek }}周
@@ -290,7 +290,7 @@
                 <p><strong>学院:</strong> {{ course.college }}</p>
                 <p><strong>校区:</strong> {{ course.campus }}</p>
                 <p><strong>教室:</strong> {{ course.classroom }}</p>
-                <p><strong>教师ID:</strong> {{ course.instructorId }}</p>
+                <p><strong>教师:</strong> {{ course.instructorName || '-' }}</p>
                 <p><strong>周次:</strong> 第{{ course.startWeek }}周 - 第{{ course.endWeek }}周</p>
                 <p v-if="course.description"><strong>描述:</strong> {{ course.description }}</p>
               </div>
@@ -2022,6 +2022,7 @@ export default {
   
   .course-name-text {
     font-size: 10px;
+    line-clamp: 4;
     -webkit-line-clamp: 4;
   }
   
@@ -2102,6 +2103,7 @@ export default {
   .course-name-text {
     font-size: 9px;
     margin-bottom: 2px;
+    line-clamp: 3;
     -webkit-line-clamp: 3;
   }
   
@@ -2222,6 +2224,7 @@ export default {
   .course-name-text {
     font-size: 8px;
     margin-bottom: 1px;
+    line-clamp: 2;
     -webkit-line-clamp: 2;
   }
   

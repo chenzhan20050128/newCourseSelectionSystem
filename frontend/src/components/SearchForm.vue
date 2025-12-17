@@ -25,7 +25,12 @@
         <div class="search-item">
           <div class="search-label">开课单位:</div>
           <div class="search-inputs">
-            <input v-model.number="query.instructorId" type="number" placeholder="教师ID" class="std-input w-80" />
+            <AutocompleteInput
+              v-model="query.instructorName"
+              placeholder="教师"
+              :fetch-suggestions="createFetch('instructorName')"
+              class="w-120"
+            />
             <AutocompleteInput
               v-model="query.college"
               placeholder="学院"
@@ -94,7 +99,7 @@
 </template>
 
 <script>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
 import AutocompleteInput from './AutocompleteInput.vue'
 import { getAttributeValues } from '../api/courseApi'
 
@@ -117,7 +122,7 @@ export default {
       credits: null,
       description: '',
       college: '',
-      instructorId: null,
+      instructorName: '',
       campus: '',
       classroom: '',
       startWeek: null,
@@ -169,7 +174,7 @@ export default {
 
     const handleReset = () => {
       Object.keys(query).forEach(key => {
-        if (typeof query[key] === 'number' || key === 'courseId' || key === 'instructorId' || key === 'credits' || key === 'startWeek' || key === 'endWeek' || key === 'startPeriod' || key === 'endPeriod') {
+        if (typeof query[key] === 'number' || key === 'courseId' || key === 'credits' || key === 'startWeek' || key === 'endWeek' || key === 'startPeriod' || key === 'endPeriod') {
           query[key] = null
         } else {
           query[key] = ''
@@ -177,10 +182,6 @@ export default {
       })
       emit('reset')
     }
-
-    onMounted(() => {
-      handleSearch()
-    })
 
     return {
       query,
