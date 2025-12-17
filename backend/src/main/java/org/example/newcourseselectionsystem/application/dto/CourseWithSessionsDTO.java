@@ -34,6 +34,8 @@ public class CourseWithSessionsDTO {
 
     private Integer enrolledCount;
 
+    private String type;
+
     private List<CourseSessionDTO> sessions;
 
     /**
