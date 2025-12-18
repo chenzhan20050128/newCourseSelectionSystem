@@ -102,7 +102,7 @@
       </form>
       
       <div class="register-footer">
-        <p>© 2025 课程选课系统</p>
+        <p>© 2025 蓝鲸选课系统</p>
       </div>
     </div>
   </div>

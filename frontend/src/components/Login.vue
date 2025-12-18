@@ -4,7 +4,7 @@
       <div class="login-header">
         <div class="logo-section">
           <img src="../assets/校标-透明.png" alt="南京大学" class="logo-image" />
-          <h2 class="system-title">南京大学课程选课系统</h2>
+          <h2 class="system-title">蓝鲸选课系统</h2>
         </div>
       </div>
       
@@ -75,7 +75,7 @@
       </form>
       
       <div class="login-footer">
-        <p>© 2025 课程选课系统</p>
+        <p>© 2025 蓝鲸选课系统</p>
       </div>
     </div>
   </div>
