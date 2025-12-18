@@ -2,7 +2,7 @@
   <div class="my-courses">
     <div class="header">
       <div class="header-left">
-        <h2>我的课程</h2>
+        <h2>已选课程</h2>
         <div v-if="courses.length > 0" class="header-stats">
           <span class="stat-item">共 <strong>{{ courses.length }}</strong> 门</span>
           <span class="stat-divider">|</span>

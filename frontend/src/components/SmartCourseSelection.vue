@@ -1,513 +1,742 @@
 <template>
-  <div class="smart-course-selection">
-    <!-- <div class="header">
-      <h2>智能选课</h2>
-      <p class="subtitle">AI 智能推荐适合您的课程</p>
-    </div> -->
+  <div class="smart-course-chat-container">
+    <div class="chat-main">
+      <!-- Header -->
+      <div class="chat-header">
+        <div class="header-inner">
+          <div class="header-right">
+            <el-button size="small" class="action-btn outline-btn header-btn" @click="newChat">
+              <el-icon><Plus /></el-icon>
+              新对话
+            </el-button>
+          </div>
+        </div>
+      </div>
 
-    <div v-if="!studentId" class="no-student-id">
-      <p>请先在上方输入学生ID</p>
-    </div>
+      <!-- Messages Area -->
+      <el-scrollbar ref="scrollbarRef" class="chat-messages" wrap-class="scrollbar-wrapper">
+        <div class="messages-inner">
+          <!-- Welcome Screen -->
+          <div v-if="messages.length === 0" class="welcome-container">
+            <div class="welcome-card">
+              <div class="welcome-icon">🎓</div>
+              <h3>你好，我是智能选课助手</h3>
+              <p>我可以根据你的兴趣、时间安排和学分需求为你推荐课程。</p>
+              
+              <div class="suggestion-grid">
+                <div 
+                  v-for="(prompt, index) in quickPrompts" 
+                  :key="index" 
+                  class="suggestion-card"
+                  @click="useQuickPrompt(prompt)"
+                >
+                  <p>{{ prompt }}</p>
+                  <el-icon><ArrowRight /></el-icon>
+                </div>
+              </div>
+            </div>
+          </div>
 
-    <div v-else class="content-wrapper">
-      <!-- 输入区域 -->
-      <div class="input-section">
-        <div class="input-group">
-          <label for="prompt">请描述您的选课需求：</label>
-          <textarea
-            id="prompt"
-            v-model="prompt"
-            placeholder="例如：我想选一些计算机相关的课程，希望是周一到周三的课，学分在3-4分之间..."
-            rows="4"
+          <!-- Message List -->
+          <div v-else class="message-list">
+            <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role]">
+              <div class="avatar-col">
+                <div class="avatar" :class="msg.role">
+                  <el-icon v-if="msg.role === 'user'"><User /></el-icon>
+                  <span v-else>AI</span>
+                </div>
+              </div>
+              <div class="content-col">
+                <div class="message-bubble" :class="msg.role">
+                  <div v-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                  <div v-else class="user-text">{{ msg.content }}</div>
+                </div>
+                
+                <!-- Action Buttons for Assistant Messages -->
+                <div v-if="msg.role === 'assistant' && (!isStreaming || index !== messages.length - 1)" class="message-actions">
+                  <el-button size="small" class="action-btn copy-btn" @click="copyContent(msg.content)">
+                    <el-icon><CopyDocument /></el-icon> 复制
+                  </el-button>
+                  <el-button size="small" class="action-btn outline-btn" @click="exportToMarkdown(msg.content)">
+                    <el-icon><Document /></el-icon> Markdown
+                  </el-button>
+                  <el-button size="small" class="action-btn outline-btn" @click="exportToWord(msg.content)">
+                    <el-icon><Document /></el-icon> Word
+                  </el-button>
+                  <el-button size="small" class="action-btn outline-btn" @click="exportToPDF(msg.content)">
+                    <el-icon><Document /></el-icon> PDF
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-scrollbar>
+
+      <!-- Input Area -->
+      <div class="chat-input-area">
+        <div class="input-box">
+          <el-input
+            v-model="inputMessage"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            placeholder="输入你的选课需求..."
+            resize="none"
+            @keydown.enter.prevent="handleEnter"
             :disabled="isStreaming"
-          ></textarea>
-        </div>
-        <div class="button-group">
-          <button
-            class="btn-submit"
-            @click="startRecommendation"
-            :disabled="!prompt.trim() || isStreaming"
-          >
-            {{ isStreaming ? '推荐中...' : '开始推荐' }}
-          </button>
-          <button
-            v-if="isStreaming"
-            class="btn-cancel"
-            @click="cancelRecommendation"
-          >
-            取消
-          </button>
-          <button
-            v-if="recommendationText && !isStreaming"
-            class="btn-clear"
-            @click="clearRecommendation"
-          >
-            清空
-          </button>
-        </div>
-      </div>
-
-      <!-- 错误提示 -->
-      <div v-if="error" class="error-message">
-        <strong>错误：</strong>{{ error }}
-      </div>
-
-      <!-- 推荐结果区域 -->
-      <div v-if="recommendationText || isStreaming" class="result-section">
-        <div class="result-header">
-          <h3>AI 推荐结果</h3>
-          <div v-if="isStreaming" class="streaming-indicator">
-            <span class="dot"></span>
-            <span>正在生成推荐...</span>
+            class="custom-textarea"
+          />
+          <div class="input-actions">
+            <el-button 
+              v-if="!isStreaming"
+              type="primary" 
+              circle 
+              :disabled="!inputMessage.trim()" 
+              @click="sendMessage"
+              class="send-btn"
+            >
+              <el-icon><Position /></el-icon>
+            </el-button>
+            <el-button 
+              v-else
+              type="danger" 
+              circle 
+              @click="stopStreaming"
+              class="stop-btn"
+            >
+              <el-icon><VideoPause /></el-icon>
+            </el-button>
           </div>
         </div>
-        <div class="result-content" ref="resultContent">
-          <div class="markdown-content" v-html="formattedText"></div>
-        </div>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-if="!recommendationText && !isStreaming && !error" class="empty-state">
-        <div class="empty-icon">🤖</div>
-        <p>请输入您的选课需求，AI 将为您智能推荐合适的课程</p>
-        <div class="example-prompts">
-          <p class="example-title">示例：</p>
-          <div class="example-item" @click="prompt = '我想选一些计算机相关的课程'">
-            "我想选一些计算机相关的课程"
-          </div>
-          <div class="example-item" @click="prompt = '希望是周一到周三的课，学分在3-4分之间'">
-            "希望是周一到周三的课，学分在3-4分之间"
-          </div>
-          <div class="example-item" @click="prompt = '推荐一些适合初学者的课程，不要太难'">
-            "推荐一些适合初学者的课程，不要太难"
-          </div>
+        <div class="input-footer">
+          <span>按 Enter 发送，Shift + Enter 换行</span>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import { ref, computed, inject, onUnmounted } from 'vue'
+<script setup>
+import { ref, inject, nextTick, onUnmounted, onMounted, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { User, Position, ArrowRight, CopyDocument, Document, VideoPause, Plus } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 import { getCourseRecommendationStream } from '../api/courseApi'
 
-export default {
-  name: 'SmartCourseSelection',
-  setup() {
-    const studentId = inject('studentId')
-    const prompt = ref('')
-    const recommendationText = ref('')
-    const isStreaming = ref(false)
-    const error = ref('')
-    const resultContent = ref(null)
-    let cancelFunction = null
+const studentId = inject('studentId')
+const messages = ref([])
+const inputMessage = ref('')
+const isStreaming = ref(false)
+const scrollbarRef = ref(null)
+let cancelStream = null
 
-    /**
-     * 格式化文本为 HTML（简单的 Markdown 支持）
-     */
-    const formattedText = computed(() => {
-      if (!recommendationText.value) return ''
-      
-      let text = recommendationText.value
-      
-      // 转义 HTML
-      text = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-      
-      // 标题
-      text = text.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      text = text.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      text = text.replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      
-      // 粗体
-      text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      
-      // 列表
-      text = text.replace(/^\* (.*$)/gim, '<li>$1</li>')
-      text = text.replace(/^- (.*$)/gim, '<li>$1</li>')
-      text = text.replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
-      
-      // 换行
-      text = text.replace(/\n/g, '<br>')
-      
-      // 包装列表项
-      text = text.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>')
-      
-      return text
-    })
+const quickPrompts = [
+  '推荐3门适合我的计算机课程',
+  '我希望课程集中在周一到周三',
+  '我想要难度适中、学分3-4的课',
+  '有哪些关于人工智能的通识课？'
+]
 
-    /**
-     * 开始推荐
-     */
-    const startRecommendation = () => {
-      if (!studentId.value || !prompt.value.trim()) {
-        error.value = '请输入选课需求'
-        return
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true
+})
+
+const renderMarkdown = (text) => {
+  return md.render(text || '')
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (scrollbarRef.value) {
+      const wrap = scrollbarRef.value.wrapRef
+      if (wrap) {
+        wrap.scrollTop = wrap.scrollHeight
       }
-
-      error.value = ''
-      recommendationText.value = ''
-      isStreaming.value = true
-
-      const request = {
-        studentId: studentId.value,
-        prompt: prompt.value.trim()
-      }
-
-      cancelFunction = getCourseRecommendationStream(
-        request,
-        // onMessage
-        (content) => {
-          recommendationText.value += content
-          // 自动滚动到底部
-          if (resultContent.value) {
-            setTimeout(() => {
-              resultContent.value.scrollTop = resultContent.value.scrollHeight
-            }, 0)
-          }
-        },
-        // onError
-        (err) => {
-          error.value = err.message || '获取推荐失败，请稍后重试'
-          isStreaming.value = false
-          cancelFunction = null
-        },
-        // onComplete
-        () => {
-          isStreaming.value = false
-          cancelFunction = null
-        }
-      )
     }
+  })
+}
 
-    /**
-     * 取消推荐
-     */
-    const cancelRecommendation = () => {
-      if (cancelFunction) {
-        cancelFunction()
-        cancelFunction = null
-      }
-      isStreaming.value = false
-    }
+const getStorageKey = () => {
+  const id = studentId?.value ? String(studentId.value) : 'anonymous'
+  return `smart-course-chat:${id}`
+}
 
-    /**
-     * 清空推荐结果
-     */
-    const clearRecommendation = () => {
-      recommendationText.value = ''
-      error.value = ''
-    }
-
-    // 组件卸载时取消请求
-    onUnmounted(() => {
-      if (cancelFunction) {
-        cancelFunction()
-      }
-    })
-
-    return {
-      studentId,
-      prompt,
-      recommendationText,
-      isStreaming,
-      error,
-      resultContent,
-      formattedText,
-      startRecommendation,
-      cancelRecommendation,
-      clearRecommendation
-    }
+const persistHistory = () => {
+  try {
+    localStorage.setItem(getStorageKey(), JSON.stringify(messages.value))
+  } catch {
+    // ignore
   }
 }
+
+const loadHistory = () => {
+  try {
+    const raw = localStorage.getItem(getStorageKey())
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      messages.value = parsed
+      scrollToBottom()
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const useQuickPrompt = (text) => {
+  inputMessage.value = text
+}
+
+const handleEnter = (e) => {
+  if (e.shiftKey) return
+  sendMessage()
+}
+
+// Export Functions
+const copyContent = async (text) => {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制到剪贴板')
+  } catch (err) {
+    ElMessage.error('复制失败')
+  }
+}
+
+const exportToMarkdown = (text) => {
+  if (!text) return
+  const blob = new Blob([text], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'course_recommendation.md'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const exportToWord = (text) => {
+  if (!text) return
+  // Simple HTML export which Word can open
+  let htmlContent = `
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>选课推荐</title>
+        <style>
+          body { font-family: Arial, sans-serif; }
+        </style>
+      </head>
+      <body>
+        ${renderMarkdown(text)}
+      </body>
+    </html>
+  `
+  
+  const blob = new Blob([htmlContent], { type: 'application/msword' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'course_recommendation.doc'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const getHtml2Pdf = async () => {
+  const mod = await import('html2pdf.js')
+  return mod?.default ?? mod
+}
+
+const exportToPDF = async (text) => {
+  if (!text) return
+
+  const html2pdf = await getHtml2Pdf()
+  const container = document.createElement('div')
+  container.style.position = 'fixed'
+  // Avoid extremely large negative coordinates (can produce blank output in html2canvas)
+  container.style.left = '0'
+  container.style.top = '0'
+  container.style.transform = 'translateX(-200vw)'
+  container.style.width = '794px' // A4 width @ 96dpi approx
+  container.style.padding = '24px'
+  container.style.background = '#fff'
+  container.style.color = '#111'
+  container.style.fontFamily = 'Arial, sans-serif'
+  const rendered = renderMarkdown(text)
+  container.innerHTML = rendered
+  // If markdown renders to empty HTML (or unexpected), fallback to raw text
+  if (!container.textContent || container.textContent.trim().length === 0) {
+    container.innerHTML = ''
+    const pre = document.createElement('pre')
+    pre.style.whiteSpace = 'pre-wrap'
+    pre.style.wordBreak = 'break-word'
+    pre.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+    pre.style.fontSize = '12px'
+    pre.textContent = text
+    container.appendChild(pre)
+  }
+  document.body.appendChild(container)
+
+  try {
+    await html2pdf()
+      .set({
+        margin: 10,
+        filename: 'course_recommendation.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      })
+      .from(container)
+      .save()
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('PDF 导出失败')
+  } finally {
+    document.body.removeChild(container)
+  }
+}
+
+const newChat = () => {
+  stopStreaming()
+  messages.value = []
+  persistHistory()
+}
+
+const stopStreaming = () => {
+  if (cancelStream) {
+    cancelStream()
+    cancelStream = null
+  }
+  isStreaming.value = false
+}
+
+const sendMessage = () => {
+  const content = inputMessage.value.trim()
+  if (!content || isStreaming.value) return
+  
+  if (!studentId.value) {
+    ElMessage.warning('请先设置学生ID')
+    return
+  }
+
+  // Add user message
+  messages.value.push({
+    role: 'user',
+    content: content
+  })
+  inputMessage.value = ''
+  scrollToBottom()
+
+  // Add placeholder for assistant message
+  const assistantMsgIndex = messages.value.length
+  messages.value.push({
+    role: 'assistant',
+    content: ''
+  })
+
+  isStreaming.value = true
+  
+  const request = {
+    studentId: studentId.value,
+    prompt: content
+  }
+
+  cancelStream = getCourseRecommendationStream(
+    request,
+    (chunk) => {
+      // Append chunk to current message
+      messages.value[assistantMsgIndex].content += chunk
+      scrollToBottom()
+    },
+    (err) => {
+      console.error(err)
+      ElMessage.error('获取推荐失败: ' + err.message)
+      messages.value[assistantMsgIndex].content += '\n\n[发生错误，请重试]'
+      isStreaming.value = false
+      cancelStream = null
+      scrollToBottom()
+    },
+    () => {
+      isStreaming.value = false
+      cancelStream = null
+      scrollToBottom()
+    }
+  )
+}
+
+onUnmounted(() => {
+  if (cancelStream) cancelStream()
+})
+
+onMounted(() => {
+  loadHistory()
+})
+
+watch(
+  () => studentId?.value,
+  () => {
+    loadHistory()
+  }
+)
+
+watch(
+  messages,
+  () => {
+    persistHistory()
+  },
+  { deep: true }
+)
 </script>
 
 <style scoped>
-.smart-course-selection {
-  padding: 20px;
+.smart-course-chat-container {
+  height: 80vh;
+  min-height: 600px;
+  background-color: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.header {
-  margin-bottom: 30px;
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.header h2 {
-  margin: 0 0 8px 0;
+.chat-header {
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.header-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-btn {
+  height: 32px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
   color: #333;
-  font-size: 24px;
 }
 
 .subtitle {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.no-student-id {
-  padding: 40px;
-  text-align: center;
+  margin: 4px 0 0 0;
+  font-size: 12px;
   color: #999;
-  background: #f9f9f9;
-  border-radius: 8px;
 }
 
-.content-wrapper {
+.chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  background-color: #f9fafb;
+  overflow: hidden;
+}
+
+.chat-messages :deep(.el-scrollbar__wrap) {
+  overflow-y: auto;
+}
+
+.messages-inner {
+  padding: 20px;
   max-width: 900px;
   margin: 0 auto;
 }
 
-.input-section {
-  background: #f9f9f9;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.input-group {
-  margin-bottom: 15px;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: bold;
-  color: #333;
-}
-
-.input-group textarea {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
-  transition: border-color 0.3s;
-}
-
-.input-group textarea:focus {
-  outline: none;
-  border-color: #1890ff;
-}
-
-.input-group textarea:disabled {
-  background: #f5f5f5;
-  cursor: not-allowed;
-}
-
-.button-group {
+.welcome-container {
   display: flex;
-  gap: 10px;
+  justify-content: center;
+  padding-top: 40px;
 }
 
-.btn-submit,
-.btn-cancel,
-.btn-clear {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s;
+.welcome-card {
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
 }
 
-.btn-submit {
-  background: #1890ff;
-  color: white;
+.welcome-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
 }
 
-.btn-submit:hover:not(:disabled) {
-  background: #40a9ff;
-}
-
-.btn-submit:disabled {
-  background: #d9d9d9;
-  cursor: not-allowed;
-}
-
-.btn-cancel {
-  background: #ff4d4f;
-  color: white;
-}
-
-.btn-cancel:hover {
-  background: #ff7875;
-}
-
-.btn-clear {
-  background: #f0f0f0;
+.welcome-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
   color: #333;
 }
 
-.btn-clear:hover {
-  background: #d9d9d9;
+.welcome-card p {
+  color: #666;
+  margin-bottom: 32px;
 }
 
-.error-message {
-  padding: 12px 16px;
-  background: #fff2f0;
-  border: 1px solid #ffccc7;
-  border-radius: 4px;
-  color: #cf1322;
-  margin-bottom: 20px;
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
 }
 
-.result-section {
-  background: white;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.result-header {
-  padding: 16px 20px;
-  background: #fafafa;
-  border-bottom: 1px solid #e8e8e8;
+.suggestion-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.result-header h3 {
-  margin: 0;
-  color: #333;
-  font-size: 18px;
-}
-
-.streaming-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #1890ff;
-  font-size: 14px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  background: #1890ff;
-  border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-.result-content {
-  padding: 20px;
-  max-height: 600px;
-  overflow-y: auto;
-  line-height: 1.8;
-  color: #333;
-}
-
-.markdown-content {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3 {
-  margin: 16px 0 8px 0;
-  color: #333;
-}
-
-.markdown-content h1 {
-  font-size: 24px;
-}
-
-.markdown-content h2 {
-  font-size: 20px;
-}
-
-.markdown-content h3 {
-  font-size: 18px;
-}
-
-.markdown-content ul {
-  margin: 8px 0;
-  padding-left: 24px;
-}
-
-.markdown-content li {
-  margin: 4px 0;
-}
-
-.markdown-content strong {
-  font-weight: bold;
-  color: #333;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #999;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-}
-
-.empty-state p {
-  font-size: 16px;
-  margin-bottom: 30px;
-}
-
-.example-prompts {
-  max-width: 600px;
-  margin: 0 auto;
+  transition: all 0.2s;
   text-align: left;
 }
 
-.example-title {
-  font-weight: bold;
-  color: #666;
-  margin-bottom: 12px;
+.suggestion-card:hover {
+  border-color: #7C1F89;
+  background-color: #f3e5f5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.example-item {
-  padding: 12px 16px;
-  background: white;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
+.suggestion-card p {
+  margin: 0;
+  font-size: 14px;
   color: #333;
+  flex: 1;
 }
 
-.example-item:hover {
-  border-color: #1890ff;
-  background: #f0f7ff;
-  transform: translateX(4px);
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-/* 滚动条样式 */
-.result-content::-webkit-scrollbar {
-  width: 8px;
+.message-row {
+  display: flex;
+  gap: 16px;
 }
 
-.result-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+.message-row.user {
+  flex-direction: row-reverse;
 }
 
-.result-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.avatar.user {
+  background-color: #f3e5f5;
+  color: #7C1F89;
+}
+
+.avatar.assistant {
+  background-color: #7C1F89;
+  color: #fff;
+}
+
+.content-col {
+  max-width: 80%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  position: relative;
+}
+
+.message-bubble.user {
+  background-color: #7C1F89;
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+.message-bubble.assistant {
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  color: #333;
+  border-top-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.user-text {
+  white-space: pre-wrap;
+}
+
+.message-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.action-btn {
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.copy-btn {
+  background-color: #7C1F89;
+  border-color: #7C1F89;
+  color: #fff;
+}
+.copy-btn:hover {
+  background-color: #9c27b0;
+  border-color: #9c27b0;
+  color: #fff;
+}
+
+.outline-btn {
+  background-color: #fff;
+  border-color: #7C1F89;
+  color: #7C1F89;
+}
+.outline-btn:hover {
+  background-color: #f3e5f5;
+  border-color: #7C1F89;
+  color: #7C1F89;
+}
+
+/* Markdown Styles */
+.markdown-body :deep(p) {
+  margin: 0 0 10px 0;
+}
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.markdown-body :deep(ul), .markdown-body :deep(ol) {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+.markdown-body :deep(code) {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
   border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.markdown-body :deep(pre) {
+  background-color: #f6f8fa;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.markdown-body :deep(pre code) {
+  background-color: transparent;
+  padding: 0;
+}
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.markdown-body :deep(a) {
+  color: #7C1F89;
+  text-decoration: none;
 }
 
-.result-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+.chat-input-area {
+  padding: 20px;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.input-box {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+  border: 1px solid #dcdfe6;
+  border-radius: 24px;
+  padding: 6px 6px 6px 16px;
+  background: #fff;
+  display: flex;
+  align-items: flex-end;
+  transition: border-color 0.2s;
+}
+
+.input-box:focus-within {
+  border-color: #7C1F89;
+  box-shadow: 0 0 0 2px #f3e5f5;
+}
+
+.custom-textarea :deep(.el-textarea__inner) {
+  border: none;
+  box-shadow: none;
+  padding: 8px 0;
+  background: transparent;
+  max-height: 150px;
+}
+
+.input-actions {
+  padding-bottom: 4px;
+  padding-right: 4px;
+}
+
+.send-btn {
+  background-color: #7C1F89;
+  border-color: #7C1F89;
+}
+.send-btn:hover {
+  background-color: #9c27b0;
+  border-color: #9c27b0;
+}
+.send-btn.is-disabled {
+  background-color: #e1bee7;
+  border-color: #e1bee7;
+}
+
+.input-footer {
+  max-width: 900px;
+  margin: 8px auto 0;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
 }
 </style>
 

@@ -130,14 +130,15 @@ export function getStudentCourses(studentId) {
 export function getCourseRecommendationStream(request, onMessage, onError, onComplete) {
   const url = '/api/recommendations/recommend'
   let cancelled = false
-  let reader = null
+  let controller = new AbortController()
   
   fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
+    signal: controller.signal
   })
   .then(async response => {
     if (!response.ok) {
@@ -145,68 +146,74 @@ export function getCourseRecommendationStream(request, onMessage, onError, onCom
       throw new Error(errorText || `HTTP error! status: ${response.status}`)
     }
     
-    reader = response.body.getReader()
+    const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let currentData = []
+    let isData = false
     
+    const processLine = (line) => {
+      // 遇到 event: 时，视为上一条消息结束，发射数据
+      if (line.startsWith('event:')) {
+        isData = false
+        if (currentData.length > 0) {
+          const content = currentData.join('\n')
+          if (content !== '[DONE]' && onMessage) {
+            onMessage(content)
+          }
+          currentData = []
+        }
+        return
+      }
+      
+      // 遇到 error: 处理错误
+      if (line.startsWith('error:')) {
+         isData = false
+         const errContent = line.slice(6).trim()
+         if (onError) onError(new Error(errContent))
+         return
+      }
+      if (isData) {
+        currentData.push(line + '\n')
+        return
+      }
+
+      // 遇到 data: 提取数据
+      if (line.startsWith('data:')) {
+        isData = true
+        let content = line.slice(5)
+        currentData.push(content)
+        return
+      }
+
+    }
+
     try {
       while (true) {
-        if (cancelled) {
-          await reader.cancel()
-          break
-        }
-        
+        if (cancelled) break
         const { done, value } = await reader.read()
         
         if (done) {
-          // 处理缓冲区中剩余的数据
-          if (buffer.trim()) {
-            const lines = buffer.split('\n')
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.substring(6).trim()
-                if (data && data !== '[DONE]' && onMessage) {
-                  onMessage(data)
-                }
-              }
-            }
+          // 处理剩余的 buffer
+          if (buffer) {
+            const lines = buffer.split(/\r?\n/)
+            lines.forEach(processLine)
+          }
+          // 确保最后的数据被发送
+          if (currentData.length > 0) {
+             const content = currentData.join('\n')
+             if (content !== '[DONE]' && onMessage) onMessage(content)
           }
           if (onComplete) onComplete()
           break
         }
         
-        // 解码数据
         buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split(/\r?\n/)
+        // 保留最后一行，因为它可能是不完整的
+        buffer = lines.pop() || ''
         
-        // 处理 SSE 格式的数据（按双换行符分割事件）
-        const events = buffer.split('\n\n')
-        buffer = events.pop() || '' // 保留最后一个不完整的事件
-        
-        for (const event of events) {
-          if (cancelled) break
-          
-          const lines = event.split('\n')
-          let eventData = ''
-          let eventType = 'message'
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              eventData = line.substring(6).trim()
-            } else if (line.startsWith('event: ')) {
-              eventType = line.substring(7).trim()
-            }
-          }
-          
-          if (eventData) {
-            if (eventType === 'error') {
-              if (onError) {
-                onError(new Error(eventData))
-              }
-            } else if (eventData !== '[DONE]') {
-              if (onMessage) onMessage(eventData)
-            }
-          }
-        }
+        lines.forEach(processLine)
       }
     } catch (err) {
       if (!cancelled && onError) {
@@ -223,9 +230,7 @@ export function getCourseRecommendationStream(request, onMessage, onError, onCom
   // 返回取消函数
   return () => {
     cancelled = true
-    if (reader) {
-      reader.cancel().catch(() => {})
-    }
+    controller.abort()
   }
 }
 
