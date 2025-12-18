@@ -26,6 +26,7 @@
               :key="course.courseId" 
               :course="course"
               :student-id="studentId"
+              :is-enrolled="course.isEnrolled"
               :is-enrolling="enrollingCourses.has(course.courseId)"
               :is-dropping="droppingCourses.has(course.courseId)"
               :message="operationMessage[course.courseId]"
@@ -45,7 +46,7 @@
 
 <script>
 // 保持原有的逻辑完全不变
-import { ref, inject } from 'vue'
+import { ref, inject, computed, onMounted, watch } from 'vue'
 import { searchCombinedCourses, enrollCourse, dropCourse } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import SearchForm from './SearchForm.vue'
@@ -54,7 +55,33 @@ export default {
   name: 'CourseSearch',
   components: { CourseCard, SearchForm },
   setup() {
-    const studentId = inject('studentId')
+    const injectedStudentId = inject('studentId')
+    const storedStudentId = ref('')
+    const resolveStudentId = () => {
+      const fromSession = sessionStorage.getItem('studentId')
+      const fromLocal = localStorage.getItem('studentId')
+      storedStudentId.value = (fromSession || fromLocal || '').trim()
+    }
+
+    // 关键：在 setup 阶段就先解析一次，确保首次默认搜索也能带上 studentId
+    resolveStudentId()
+
+    const normalizeId = (value) => {
+      if (value === null || value === undefined || value === '') return null
+      const raw = String(value).trim()
+      if (!raw) return null
+      return /^\d+$/.test(raw) ? Number(raw) : value
+    }
+
+    const studentId = computed(() => {
+      const injected = injectedStudentId?.value
+      return injected !== null && injected !== undefined && injected !== ''
+        ? injected
+        : (storedStudentId.value || null)
+    })
+
+    const normalizedStudentId = computed(() => normalizeId(studentId.value))
+
     const results = ref([])
     const loading = ref(false)
     const error = ref('')
@@ -68,12 +95,18 @@ export default {
     
     // START COPY FROM ORIGINAL
     const handleSearch = async (query) => {
+      // 再兜底刷新一次：避免页面刚打开时 storage 写入有延迟
+      resolveStudentId()
       loading.value = true
       error.value = ''
       searched.value = true
       results.value = []
       try {
-        const combinedRequest = { courseCondition: null, sessionCondition: null }
+        const combinedRequest = { courseCondition: null, sessionCondition: null, studentId: null }
+
+        // 0. 附带 studentId（与 enroll/drop 相同口径：注入 + storage 兜底 + 数字归一）
+        combinedRequest.studentId = normalizedStudentId.value
+
         const courseCondition = {}
         const normalKeys = ['courseId', 'courseName', 'credits', 'description', 'college', 'campus', 'classroom', 'startWeek', 'endWeek']
         let hasCourseCondition = false
@@ -111,7 +144,10 @@ export default {
           }
         }
         const data = await searchCombinedCourses(combinedRequest) || []
-        results.value = data
+        results.value = (data || []).map(course => ({
+          ...course,
+          isEnrolled: Boolean(course?.isEnrolled)
+        }))
       } catch (err) {
         error.value = err.message || '查询失败'
         console.error('Search error:', err)
@@ -128,7 +164,7 @@ export default {
     }
 
     const handleEnroll = async (course) => {
-      if (!studentId.value) { setOperationMessage(course.courseId, 'error', '请先输入学生ID'); return }
+      if (!normalizedStudentId.value) { setOperationMessage(course.courseId, 'error', '请先输入学生ID'); return }
       enrollingCourses.value.add(course.courseId)
       clearOperationMessage(course.courseId)
       const batchId = localStorage.getItem('selectedBatchId')
@@ -139,11 +175,12 @@ export default {
       }
       // ... Time check logic from original ...
       try {
-        const response = await enrollCourse({ studentId: studentId.value, courseId: course.courseId, batchId: Number(batchId) })
+        const response = await enrollCourse({ studentId: normalizedStudentId.value, courseId: course.courseId, batchId: Number(batchId) })
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
           if (response.warn) setTimeout(() => setOperationMessage(course.courseId, 'warning', response.warn), 2000)
           course.enrolledCount = (course.enrolledCount || 0) + 1
+          course.isEnrolled = true
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -153,14 +190,15 @@ export default {
     }
 
     const handleDrop = async (course) => {
-      if (!studentId.value) { setOperationMessage(course.courseId, 'error', '请先输入学生ID'); return }
+      if (!normalizedStudentId.value) { setOperationMessage(course.courseId, 'error', '请先输入学生ID'); return }
       droppingCourses.value.add(course.courseId)
       clearOperationMessage(course.courseId)
       try {
-        const response = await dropCourse({ studentId: studentId.value, courseId: course.courseId })
+        const response = await dropCourse({ studentId: normalizedStudentId.value, courseId: course.courseId })
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
           course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
+          course.isEnrolled = false
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -175,6 +213,30 @@ export default {
     }
     const clearOperationMessage = (courseId) => { if (operationMessage.value[courseId]) delete operationMessage.value[courseId] }
     // END COPY
+
+    onMounted(() => {
+      resolveStudentId()
+      // 避免与 SearchForm 的 onMounted 自动搜索重复
+      if (!searched.value) {
+        handleSearch({})
+      }
+    })
+
+    watch(
+      () => injectedStudentId?.value,
+      (newVal, oldVal) => {
+        if (newVal !== null && newVal !== undefined && newVal !== '') {
+          const normalized = String(newVal)
+          storedStudentId.value = normalized
+          localStorage.setItem('studentId', normalized)
+          sessionStorage.setItem('studentId', normalized)
+          if (!oldVal && !searched.value) {
+            handleSearch({})
+          }
+        }
+      },
+      { immediate: true }
+    )
 
     return {
       studentId, results, loading, error, searched,

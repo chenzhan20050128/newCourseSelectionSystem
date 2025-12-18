@@ -20,11 +20,11 @@
     <div class="filter-bar">
       <!-- 教师 -->
       <div class="filter-cell">
-        <input 
-          v-model.number="query.instructorId" 
-          type="number" 
-          placeholder="教师ID" 
-          class="std-input" 
+        <AutocompleteInput
+          v-model="query.instructorName"
+          placeholder="教师姓名"
+          :fetch-suggestions="createFetch('instructorName')"
+          class="full-width"
         />
       </div>
 
@@ -107,7 +107,7 @@ export default {
       courseName: '', 
       credits: null, 
       college: '', 
-      instructorId: null, 
+      instructorName: '', 
       campus: '', 
       // 移除了 classroom, startWeek, endWeek
       weekday: '', 
@@ -169,7 +169,7 @@ export default {
       
       // 清空 query
       Object.keys(query).forEach(key => {
-        if (['courseId', 'instructorId', 'credits', 'startPeriod', 'endPeriod'].includes(key)) {
+        if (['courseId', 'credits', 'startPeriod', 'endPeriod'].includes(key)) {
           query[key] = null
           return
         }

@@ -56,7 +56,7 @@
         {{ isEnrolling ? '...' : '选课' }}
       </button>
       <button class="btn btn-action btn-drop" v-else @click="$emit('drop', course)" :disabled="!canDrop">
-        {{ isDropping ? '...' : '退订' }}
+        {{ isDropping ? '...' : '退课' }}
       </button>
     </div>
   </div>
@@ -70,6 +70,7 @@ export default {
   props: {
     course: { type: Object, required: true },
     studentId: { type: [String, Number], default: null },
+    isEnrolled: { type: Boolean, default: false },
     isEnrolling: { type: Boolean, default: false },
     isDropping: { type: Boolean, default: false },
     message: { type: Object, default: null }
@@ -189,8 +190,8 @@ export default {
 .btn-enroll { background: #7C1F89; color: white; }
 .btn-enroll:hover:not(:disabled) { background: #9027a0; box-shadow: 0 2px 8px rgba(124, 31, 137, 0.3); }
 .btn-enroll:disabled { background: #dcdfe6; cursor: not-allowed; }
-.btn-drop { background: #fff; border-color: #ff4d4f; color: #ff4d4f; }
-.btn-drop:hover:not(:disabled) { background: #fff0f0; }
+.btn-drop { background: #ff4d4f; border-color: #ff4d4f; color: #fff; }
+.btn-drop:hover:not(:disabled) { background: #ff7875; border-color: #ff7875; }
 
 .message-toast { position: absolute; top: -30px; right: 0; padding: 4px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: #fff; z-index: 10; }
 .message-toast.success { color: #52c41a; border: 1px solid #b7eb8f; background: #f6ffed; }
