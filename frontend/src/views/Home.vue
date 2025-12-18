@@ -61,7 +61,7 @@
         </div>
       </div>
     </div>
-    
+
     <div class="tabs">
       <button 
         :class="['tab', { active: activeTab === 'course' }]"
@@ -85,11 +85,28 @@
       </button>
     </div>
 
+  <!-- 内容区 -->
     <div class="content">
+      <!-- 这里不需要再监听 openDrawer 了，因为按钮就在本页面 -->
       <CourseSearch v-if="activeTab === 'course'" />
       <MyCourses v-if="activeTab === 'myCourses' && user?.userType === 'student'" />
       <SmartCourseSelection v-if="activeTab === 'smartSelection' && user?.userType === 'student'" />
     </div>
+
+    <!-- [新增] 全局悬浮选课进度挂件 -->
+    <!-- 放在最外层，确保不受 overflow 影响 -->
+    <div class="floating-progress-widget" @click="showProgressDrawer = true">
+      <div class="widget-content">
+        <div class="widget-title">选课进度</div>
+        <div class="widget-subtitle">点击查看</div>
+      </div>
+    </div>
+
+    <!-- 抽屉组件 -->
+    <CourseProgressDrawer 
+      :visible="showProgressDrawer" 
+      @close="showProgressDrawer = false" 
+    />
   </div>
 </template>
 
@@ -99,6 +116,7 @@ import { useRouter } from 'vue-router';
 import CourseSearch from '../components/CourseSearch.vue';
 import MyCourses from '../components/MyCourses.vue';
 import SmartCourseSelection from '../components/SmartCourseSelection.vue';
+import CourseProgressDrawer from '../components/CourseProgressDrawer.vue';
 import { logout } from '../api/authApi';
 import { getAllBatches } from '../api/electiveBatchApi';
 
@@ -107,7 +125,8 @@ export default {
   components: {
     CourseSearch,
     MyCourses,
-    SmartCourseSelection
+    SmartCourseSelection,
+    CourseProgressDrawer
   },
   setup() {
     const router = useRouter();
@@ -119,7 +138,7 @@ export default {
     const showBatchDetails = ref(false);
     const timeRemaining = ref('');
     let countdownTimer = null;
-    
+    const showProgressDrawer = ref(false);
     // 切换详细信息显示
     const toggleBatchDetails = () => {
       showBatchDetails.value = !showBatchDetails.value;
@@ -302,7 +321,8 @@ export default {
       selectBatch,
       formatDateTime,
       handleLogout,
-      toggleBatchDetails
+      toggleBatchDetails,
+      showProgressDrawer
     };
   }
 };
@@ -652,5 +672,78 @@ export default {
 .batch-option-time {
   color: #666;
   font-size: 14px;
+}
+
+/* [修改] 悬浮挂件样式 - 精致、现代、显眼 */
+.floating-progress-widget {
+  position: fixed;
+  top: 220px;
+  right: 15px; /* 稍微留一点边距，不要死贴边 */
+  z-index: 999;
+  
+  /* 容器尺寸和背景 */
+  background: white;
+  padding: 16px 12px;
+  border-radius: 50px; /* 变成两头圆的胶囊形状 */
+  
+  /* 关键：用投影代替粗边框，更高级 */
+  box-shadow: 0 8px 24px rgba(124, 31, 137, 0.2); 
+  /* 留一个极细的边框增加锐度 */
+  border: 1px solid rgba(124, 31, 137, 0.1);
+  
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性过渡 */
+  
+  /* 布局 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 鼠标悬停动画：整体上浮 + 变色 */
+.floating-progress-widget:hover {
+  transform: translateY(-6px); /* 明显上浮 */
+  box-shadow: 0 15px 35px rgba(124, 31, 137, 0.35); /* 投影加深扩散 */
+  background: #7C1F89; /* [关键改变] 悬停时背景变紫 */
+  border-color: #7C1F89;
+}
+
+/* 内部内容容器 */
+.widget-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 图标：用 emoji 或者 svg */
+.widget-icon {
+  font-size: 24px;
+  line-height: 1;
+  margin-bottom: 4px;
+  transition: all 0.3s;
+}
+
+/* 标题：竖排 */
+.widget-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #7C1F89; /* 默认紫色字 */
+  writing-mode: vertical-lr; /* 竖排 */
+  letter-spacing: 4px; /* 字间距 */
+  font-family: sans-serif;
+  transition: all 0.3s;
+}
+
+/* [关键交互] 悬停时文字和图标变白 */
+.floating-progress-widget:hover .widget-title,
+.floating-progress-widget:hover .widget-icon {
+  color: white;
+}
+
+/* 删掉之前的 subtitle 相关样式，完全不需要它 */
+.widget-subtitle {
+  display: none;
 }
 </style>
