@@ -6,7 +6,7 @@
         <div class="search-item">
           <div class="search-label">课程信息:</div>
           <div class="search-inputs">
-            <input v-model.number="query.courseId" type="text" placeholder="课程号" class="std-input w-80" />
+            <input v-model.trim="query.courseId" type="text" placeholder="课程号" class="std-input w-80" />
             <AutocompleteInput
               v-model="query.courseName"
               placeholder="课程名"
@@ -117,7 +117,7 @@ export default {
   emits: ['search', 'reset'],
   setup(props, { emit }) {
     const query = reactive({
-      courseId: null,
+      courseId: '',
       courseName: '',
       credits: null,
       description: '',
@@ -174,11 +174,15 @@ export default {
 
     const handleReset = () => {
       Object.keys(query).forEach(key => {
-        if (typeof query[key] === 'number' || key === 'courseId' || key === 'credits' || key === 'startWeek' || key === 'endWeek' || key === 'startPeriod' || key === 'endPeriod') {
-          query[key] = null
-        } else {
+        if (key === 'courseId') {
           query[key] = ''
+          return
         }
+        if (key === 'credits' || key === 'startWeek' || key === 'endWeek' || key === 'startPeriod' || key === 'endPeriod') {
+          query[key] = null
+          return
+        }
+        query[key] = ''
       })
       emit('reset')
     }

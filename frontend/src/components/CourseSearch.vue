@@ -139,6 +139,13 @@ export default {
         }
 
         if (hasCourseCondition) {
+          // courseId 输入框是文本；若为纯数字则转为 Number，便于后端 Long 解析
+          if (courseCondition.courseId !== undefined && courseCondition.courseId !== null && courseCondition.courseId !== '') {
+            const rawCourseId = String(courseCondition.courseId).trim()
+            if (/^\d+$/.test(rawCourseId)) {
+              courseCondition.courseId = Number(rawCourseId)
+            }
+          }
           combinedRequest.courseCondition = courseCondition
         }
 
