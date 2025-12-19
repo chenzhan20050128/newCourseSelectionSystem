@@ -2,7 +2,7 @@
   <div class="my-courses">
     <div class="header">
       <div class="header-left">
-        <h2>已选课程</h2>
+        <h2>我的课程</h2>
         <div v-if="courses.length > 0" class="header-stats">
           <span class="stat-item">共 <strong>{{ courses.length }}</strong> 门</span>
           <span class="stat-divider">|</span>
@@ -12,15 +12,15 @@
       <div class="header-actions">
         <button 
           class="btn-list-view" 
-          @click="fetchRecommendations"
+          @click="handleRecommendationsButtonClick"
           :disabled="loading || !studentId"
         >
           查看选课建议
         </button>
         <button 
           class="btn-list-view" 
-          @click="showCourseList = true"
-          :disabled="loading || !studentId || courses.length === 0"
+          @click="handleShowSelectedCourses"
+          :disabled="loading || !studentId"
         >
           查看已选课程
         </button>
@@ -51,102 +51,256 @@
     </div>
 
     <!-- 课程表 -->
-    <div v-if="courses.length > 0" class="schedule-container">
+    <div v-if="courses.length > 0" class="schedule-layout">
+      <div class="schedule-main">
+        <div class="schedule-container">
+          <div class="schedule-wrapper">
+            <div class="schedule-grid">
+              <!-- 表头：周几 -->
+              <div class="grid-header time-header"></div>
+              <div 
+                v-for="(day, index) in weekdays" 
+                :key="index" 
+                class="grid-header day-header"
+                :class="{ 'today': isToday(index) }"
+              >
+                <div class="day-name">{{ day }}</div>
+              </div>
 
-      <div class="schedule-wrapper">
-        <div class="schedule-grid">
-          <!-- 表头：周几 -->
-          <div class="grid-header time-header"></div>
-          <div 
-            v-for="(day, index) in weekdays" 
-            :key="index" 
-            class="grid-header day-header"
-            :class="{ 'today': isToday(index) }"
-          >
-            <div class="day-name">{{ day }}</div>
+              <!-- 课程表主体 -->
+              <template v-for="period in periods" :key="period.period">
+                <!-- 上午时段标签（第1节） -->
+                <div v-if="period.period === 1" class="time-period-label morning-label">
+                  <span class="period-label-text">上午</span>
+                </div>
+                
+                <!-- 午间分隔行（在第4节后） -->
+                <div v-if="period.period === 5" class="time-break time-break-with-text">
+                  <span class="break-text">午休</span>
+                </div>
+                
+                <!-- 下午时段标签（第5节） -->
+                <div v-if="period.period === 5" class="time-period-label afternoon-label">
+                  <span class="period-label-text">下午</span>
+                </div>
+                
+                <!-- 傍晚分隔行（在第8节后） -->
+                <div v-if="period.period === 9" class="time-break time-break-with-text">
+                  <span class="break-text">傍晚</span>
+                </div>
+                
+                <!-- 晚间时段标签（第9节） -->
+                <div v-if="period.period === 9" class="time-period-label evening-label">
+                  <span class="period-label-text">晚间</span>
+                </div>
+
+                <!-- 左侧节次和时间（不显示时段标签的行） -->
+                <div v-if="![1, 5, 9].includes(period.period)" class="period-header" :data-period="period.period">
+                  <div class="period-number">第{{ period.period }}节</div>
+                  <div class="period-time">{{ period.time }}</div>
+                </div>
+                
+                <!-- 有时段标签的行，节次时间部分 -->
+                <div v-else class="period-header period-header-with-label" :data-period="period.period">
+                  <div class="period-number">第{{ period.period }}节</div>
+                  <div class="period-time">{{ period.time }}</div>
+                </div>
+
+                <!-- 每天的单元格 -->
+                <div 
+                  v-for="(day, dayIndex) in weekdays" 
+                  :key="`${period.period}-${dayIndex}`"
+                  class="schedule-cell"
+                  :class="{ 
+                    'empty-cell': getCellBlocks(day, period.period).length === 0,
+                    'show-confirm': isShowingConfirm(day, period.period)
+                  }"
+                  :data-day="day"
+                  :data-period="period.period"
+                  @mouseenter="handleCellHover(day, period.period)"
+                  @mouseleave="handleCellLeave(day, period.period)"
+                >
+                  <!-- 该单元格的所有课程块 -->
+                  <div 
+                    v-for="(block, blockIndex) in getCellBlocks(day, period.period)"
+                    :key="`block-${block.course.courseId}-${block.session.sessionId}-${blockIndex}`"
+                    class="course-block"
+                    :class="{
+                      'has-conflict': getCellConflictCount(block, day, period.period) > 1
+                    }"
+                    :style="getBlockStyle(block)"
+                    @click.stop="showCourseDetail(block.course)"
+                  >
+                    <div v-if="hasMultipleCampuses" class="campus-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ (block.course.campus || '未知').replace('校区', '') }}</div>
+                    <div v-if="block.session.weekType && block.session.weekType !== 0" class="week-type-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ block.session.weekType === 1 ? '单' : '双' }}</div>
+                    <div class="course-name-text">{{ block.course.courseName }}</div>
+                    <div class="course-location">{{ block.course.classroom }}</div>
+                  </div>
+                  
+                  <!-- 空单元格的确认按钮 -->
+                  <div 
+                    v-if="isShowingConfirm(day, period.period)" 
+                    class="confirm-buttons"
+                    @click.stop
+                  >
+                    <p class="confirm-text">查询可选课程？</p>
+                    <button class="btn-confirm-small" @click.stop="confirmSearchCourses">确认</button>
+                  </div>
+                </div>
+              </template>
+            </div>
           </div>
-
-          <!-- 课程表主体 -->
-          <template v-for="period in periods" :key="period.period">
-            <!-- 上午时段标签（第1节） -->
-            <div v-if="period.period === 1" class="time-period-label morning-label">
-              <span class="period-label-text">上午</span>
-            </div>
-            
-            <!-- 午间分隔行（在第4节后） -->
-            <div v-if="period.period === 5" class="time-break time-break-with-text">
-              <span class="break-text">午 间</span>
-            </div>
-            
-            <!-- 下午时段标签（第5节） -->
-            <div v-if="period.period === 5" class="time-period-label afternoon-label">
-              <span class="period-label-text">下午</span>
-            </div>
-            
-            <!-- 傍晚分隔行（在第8节后） -->
-            <div v-if="period.period === 9" class="time-break time-break-with-text">
-              <span class="break-text">傍 晚</span>
-            </div>
-            
-            <!-- 晚间时段标签（第9节） -->
-            <div v-if="period.period === 9" class="time-period-label evening-label">
-              <span class="period-label-text">晚间</span>
-            </div>
-
-            <!-- 左侧节次和时间（不显示时段标签的行） -->
-            <div v-if="![1, 5, 9].includes(period.period)" class="period-header" :data-period="period.period">
-              <div class="period-number">第{{ period.period }}节</div>
-              <div class="period-time">{{ period.time }}</div>
-            </div>
-            
-            <!-- 有时段标签的行，节次时间部分 -->
-            <div v-else class="period-header period-header-with-label" :data-period="period.period">
-              <div class="period-number">第{{ period.period }}节</div>
-              <div class="period-time">{{ period.time }}</div>
-            </div>
-
-            <!-- 每天的单元格 -->
-            <div 
-              v-for="(day, dayIndex) in weekdays" 
-              :key="`${period.period}-${dayIndex}`"
-              class="schedule-cell"
-              :class="{ 
-                'empty-cell': getCellBlocks(day, period.period).length === 0,
-                'show-confirm': isShowingConfirm(day, period.period)
-              }"
-              :data-day="day"
-              :data-period="period.period"
-              @mouseenter="handleCellHover(day, period.period)"
-              @mouseleave="handleCellLeave(day, period.period)"
+        </div>
+      </div>
+      <div class="schedule-sidebar">
+        <div 
+          class="sidebar-section recommendations-section" 
+          data-section="recommendations"
+          v-show="activeSidebarPanel === 'recommendations'"
+        >
+          <div class="sidebar-section-header">
+            <h3>选课推荐</h3>
+            <button 
+              class="btn-link" 
+              @click="fetchRecommendations"
+              :disabled="loadingRecommendations || !studentId"
             >
-              <!-- 该单元格的所有课程块 -->
-              <div 
-                v-for="(block, blockIndex) in getCellBlocks(day, period.period)"
-                :key="`block-${block.course.courseId}-${block.session.sessionId}-${blockIndex}`"
-                class="course-block"
-                :class="{
-                  'has-conflict': getCellConflictCount(block, day, period.period) > 1
-                }"
-                :style="getBlockStyle(block)"
-                @click.stop="showCourseDetail(block.course)"
-              >
-                <div v-if="hasMultipleCampuses" class="campus-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ (block.course.campus || '未知').replace('杀区', '') }}</div>
-                <div v-if="block.session.weekType && block.session.weekType !== 0" class="week-type-badge" :style="getCampusBadgeStyle(block.course.courseId)">{{ block.session.weekType === 1 ? '单' : '双' }}</div>
-                <div class="course-name-text">{{ block.course.courseName }}</div>
-                <div class="course-location">{{ block.course.classroom }}</div>
-              </div>
-              
-              <!-- 空单元格的确认按钮 -->
-              <div 
-                v-if="isShowingConfirm(day, period.period)" 
-                class="confirm-buttons"
-                @click.stop
-              >
-                <p class="confirm-text">查询可选课程？</p>
-                <button class="btn-confirm-small" @click.stop="confirmSearchCourses">确认</button>
+              {{ loadingRecommendations ? '加载中...' : '刷新' }}
+            </button>
+          </div>
+          <div v-if="!studentId" class="sidebar-hint">
+            请输入学生ID后查看推荐
+          </div>
+          <div v-else>
+            <div v-if="loadingRecommendations" class="sidebar-loading">获取建议中...</div>
+            <div v-else-if="recommendationsError" class="error-message compact">
+              {{ recommendationsError }}
+            </div>
+            <div v-else-if="creditProgress.length === 0" class="sidebar-empty">
+              暂无进度数据，点击上方按钮尝试刷新
+            </div>
+            <div v-else class="progress-list">
+              <div v-for="item in creditProgress" :key="item.type" class="progress-item-container">
+                <div class="progress-row">
+                  <div class="progress-label">{{ item.type }}</div>
+                  <div class="progress-track-wrapper">
+                    <div class="progress-track">
+                      <div 
+                        class="progress-bar"
+                        :class="{ 'bar-green': item.earned >= item.required, 'bar-red': item.earned < item.required }"
+                        :style="{ width: getProgressPercent(item.earned, item.required) + '%' }"
+                      ></div>
+                    </div>
+                  </div>
+                  <div class="progress-value">
+                    <span v-if="item.earned < item.required">
+                      {{ item.earned }}/{{ item.required }}
+                    </span>
+                    <span v-else class="status-ok">
+                      已完成
+                    </span>
+                  </div>
+                  <div class="progress-action">
+                    <button 
+                      v-if="item.earned < item.required" 
+                      class="btn-recommend"
+                      @click="toggleCategory(item.type)"
+                    >
+                      {{ expandedCategory === item.type ? '收起' : '推荐课程' }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="expandedCategory === item.type" class="recommendation-dropdown">
+                  <div v-if="!recommendations[item.type] || recommendations[item.type].length === 0" class="no-recs-hint">
+                    该类别暂无推荐课程
+                  </div>
+                  <div v-else class="course-grid">
+                    <div 
+                      v-for="course in recommendations[item.type]" 
+                      :key="course.courseId" 
+                      class="course-card mini-card"
+                    >
+                      <div class="course-header">
+                        <span class="course-name">{{ course.courseName }}</span>
+                        <span class="credits">{{ course.credits }} 分</span>
+                      </div>
+                      <div class="course-info compact">
+                        <p><strong>老师:</strong> {{ course.instructorName }}</p>
+                        <p><strong>时间:</strong> 
+                          <span v-for="(session, idx) in course.sessions" :key="idx">
+                            {{ session.weekday }}{{ session.startPeriod }}-{{ session.endPeriod }} 
+                          </span>
+                        </p>
+                        <p><strong>容量:</strong> {{ course.enrolledCount }}/{{ course.capacity }}</p>
+                      </div>
+                      <div v-if="operationMessage[course.courseId]" 
+                        :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
+                        {{ operationMessage[course.courseId].message }}
+                      </div>
+                      <div class="course-actions">
+                        <button 
+                          class="btn-enroll small"
+                          @click="handleEnrollFromDialog(course)"
+                          :disabled="!studentId || enrollingCourses.has(course.courseId)"
+                        >
+                          {{ enrollingCourses.has(course.courseId) ? '...' : '选课' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </template>
+          </div>
+        </div>
+
+        <div 
+          class="sidebar-section selected-section" 
+          data-section="selected-courses"
+          v-show="activeSidebarPanel === 'selected'"
+        >
+          <div class="sidebar-section-header">
+            <h3>已选课程</h3>
+          </div>
+          <div v-if="courses.length === 0" class="sidebar-empty">
+            您还没有选课
+          </div>
+          <div v-else class="selected-course-list">
+            <div 
+              v-for="course in courses" 
+              :key="course.courseId" 
+              class="selected-course-card"
+            >
+              <div class="selected-course-main">
+                <div class="selected-course-name">{{ course.courseName }}</div>
+              </div>
+              <div class="selected-course-meta">
+                <span>{{ course.campus || '-' }}</span>
+                <span>{{ course.credits }} 学分</span>
+              </div>
+              <div class="selected-course-sessions">
+                <div 
+                  v-for="session in course.sessions" 
+                  :key="session.sessionId" 
+                  class="session-item"
+                >
+                  {{ session.weekday }} {{ session.startPeriod }}-{{ session.endPeriod }}节
+                  <span v-if="session.weekType === 1" class="week-tag single">单</span>
+                  <span v-if="session.weekType === 2" class="week-tag double">双</span>
+                </div>
+              </div>
+              <div class="selected-course-actions">
+                <button 
+                  class="btn-drop-small"
+                  @click="handleDrop(course)"
+                  :disabled="droppingCourses.has(course.courseId)"
+                >
+                  {{ droppingCourses.has(course.courseId) ? '退课中...' : '退课' }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -207,57 +361,6 @@
           >
             {{ droppingCourses.has(selectedCourse.courseId) ? '退课中...' : '退课' }}
           </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 课程列表对话框 -->
-    <div v-if="showCourseList" class="dialog-overlay" @click.self="showCourseList = false">
-      <div class="dialog-content course-list-dialog">
-        <div class="dialog-header">
-          <h3>已选课程列表</h3>
-          <button class="dialog-close" @click="showCourseList = false">&times;</button>
-        </div>
-        <div class="dialog-body">
-          <div class="course-list-table-container">
-            <table class="course-list-table">
-              <thead>
-                <tr>
-                  <th>课程名称</th>
-                  <th>学分</th>
-                  <th>校区</th>
-                  <th>上课时间</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="course in courses" :key="course.courseId">
-                  <td class="course-name-cell">
-                    <div class="course-name-main">{{ course.courseName }}</div>
-                    <div class="course-id-sub">{{ course.courseId }}</div>
-                  </td>
-                  <td>{{ course.credits }}</td>
-                  <td>{{ course.campus || '-' }}</td>
-                  <td class="course-time-cell">
-                    <div v-for="session in course.sessions" :key="session.sessionId" class="session-item">
-                      {{ session.weekday }} {{ session.startPeriod }}-{{ session.endPeriod }}节
-                      <span v-if="session.weekType === 1" class="week-tag single">单</span>
-                      <span v-if="session.weekType === 2" class="week-tag double">双</span>
-                    </div>
-                  </td>
-                  <td>
-                    <button 
-                      class="btn-drop-small"
-                      @click="handleDrop(course)"
-                      :disabled="droppingCourses.has(course.courseId)"
-                    >
-                      {{ droppingCourses.has(course.courseId) ? '退课中...' : '退课' }}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
     </div>
@@ -323,114 +426,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 选课建议对话框 -->
-        <div v-if="showRecommendations" class="dialog-overlay" @click="showRecommendations = false">
-          <div class="dialog-content available-courses-dialog" @click.stop>
-            <button class="dialog-close" @click="showRecommendations = false">×</button>
-            <div class="dialog-header">
-              <h3>学分进度与选课建议</h3>
-            </div>
-            <div class="dialog-body">
-              <div v-if="loadingRecommendations" class="loading">
-                获取建议中...
-              </div>
-              <div v-else-if="recommendationsError" class="error-message">
-                {{ recommendationsError }}
-              </div>
-              <div v-else-if="!creditProgress || creditProgress.length === 0" class="no-results">
-                暂无进度数据
-              </div>
-              
-              <!-- 新的布局：进度条列表 -->
-              <div v-else class="progress-list">
-                <div v-for="item in creditProgress" :key="item.type" class="progress-item-container">
-                  
-                  <!-- 进度条行 -->
-                  <div class="progress-row">
-                    <div class="progress-label">{{ item.type }}</div>
-                    
-                    <div class="progress-track-wrapper">
-                      <div class="progress-track">
-                        <div 
-                          class="progress-bar"
-                          :class="{ 'bar-green': item.earned >= item.required, 'bar-red': item.earned < item.required }"
-                          :style="{ width: getProgressPercent(item.earned, item.required) + '%' }"
-                        ></div>
-                      </div>
-                    </div>
-
-                    <!-- 进度数值 (仅未完成时显示) -->
-                    <div class="progress-value">
-                      <span v-if="item.earned < item.required">
-                        {{ item.earned }}/{{ item.required }}
-                      </span>
-                      <span v-else class="status-ok">
-                        已完成
-                      </span>
-                    </div>
-
-                    <!-- 操作按钮 (仅未完成且有推荐课程时显示) -->
-                    <div class="progress-action">
-                      <button 
-                        v-if="item.earned < item.required" 
-                        class="btn-recommend"
-                        @click="toggleCategory(item.type)"
-                      >
-                        {{ expandedCategory === item.type ? '收起' : '推荐课程' }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- 展开的推荐课程列表 -->
-                  <div v-if="expandedCategory === item.type" class="recommendation-dropdown">
-                    
-                    <div v-if="!recommendations[item.type] || recommendations[item.type].length === 0" class="no-recs-hint">
-                      该类别暂无推荐课程
-                    </div>
-
-                    <div v-else class="course-grid">
-                      <!-- 复用之前的课程卡片样式，稍微调整布局 -->
-                      <div v-for="course in recommendations[item.type]" :key="course.courseId" class="course-card mini-card">
-                        <div class="course-header">
-                          <span class="course-name">{{ course.courseName }}</span>
-                          <span class="credits">{{ course.credits }} 分</span>
-                        </div>
-                        <div class="course-info compact">
-                          <p><strong>教师:</strong> {{ course.instructorName }}</p>
-                          <p><strong>时间:</strong> 
-                            <span v-for="(session, idx) in course.sessions" :key="idx">
-                              {{ session.weekday }}{{ session.startPeriod }}-{{ session.endPeriod }} 
-                            </span>
-                          </p>
-                          <p><strong>容量:</strong> {{ course.enrolledCount }}/{{ course.capacity }}</p>
-                        </div>
-                        
-                        <!-- 操作反馈消息 -->
-                        <div v-if="operationMessage[course.courseId]" 
-                            :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
-                          {{ operationMessage[course.courseId].message }}
-                        </div>
-
-                        <div class="course-actions">
-                          <button 
-                            class="btn-enroll small"
-                            @click="handleEnrollFromDialog(course)"
-                            :disabled="!studentId || enrollingCourses.has(course.courseId)"
-                          >
-                            {{ enrollingCourses.has(course.courseId) ? '...' : '选课' }}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
   </div>
 </template>
 
@@ -448,8 +443,8 @@ export default {
     const loading = ref(false)
     const error = ref('')
     const selectedCourse = ref(null)
-    const showCourseList = ref(false)
     const successMessage = ref('')
+    const activeSidebarPanel = ref('recommendations')
     
     // 退课相关状态
     const droppingCourses = ref(new Set())
@@ -465,7 +460,6 @@ export default {
     const queryPeriod = ref(null)
     
     // 选课建议相关状态
-    const showRecommendations = ref(false)
     const recommendations = ref([])
     const loadingRecommendations = ref(false)
     const recommendationsError = ref('')
@@ -479,7 +473,6 @@ export default {
       
       loadingRecommendations.value = true
       recommendationsError.value = ''
-      showRecommendations.value = true
       // 重置状态
       expandedCategory.value = ''
       
@@ -508,6 +501,16 @@ export default {
       } finally {
         loadingRecommendations.value = false
       }
+    }
+
+    const handleRecommendationsButtonClick = () => {
+      if (!studentId.value) return
+      activeSidebarPanel.value = 'recommendations'
+      fetchRecommendations()
+    }
+
+    const handleShowSelectedCourses = () => {
+      activeSidebarPanel.value = 'selected'
     }
 
     // 新增：切换展开/收起推荐课程
@@ -1106,7 +1109,6 @@ export default {
       totalCredits,
       weekdays,
       periods,
-      showCourseList,
       selectedCourse,
       loadCourses,
       handleDrop,
@@ -1134,7 +1136,9 @@ export default {
       confirmSearchCourses,
       cancelSearchCourses,
       isShowingConfirm,
-      showRecommendations,
+      activeSidebarPanel,
+      handleRecommendationsButtonClick,
+      handleShowSelectedCourses,
       recommendations,
       loadingRecommendations,
       recommendationsError,
@@ -1281,6 +1285,124 @@ export default {
   color: #667eea;
   font-size: 16px;
   font-weight: 500;
+}
+
+.schedule-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.schedule-main {
+  flex: 0 0 65%;
+  max-width: 65%;
+}
+
+.schedule-sidebar {
+  flex: 1;
+  max-width: 35%;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.sidebar-section {
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sidebar-section-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.btn-link {
+  border: 1px solid #7C1F89;
+  background: #7C1F89;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: opacity 0.2s;
+}
+
+.btn-link:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.btn-link:disabled {
+  background: #ccc;
+  border-color: #ccc;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.sidebar-hint,
+.sidebar-empty,
+.sidebar-loading {
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  padding: 12px 4px;
+}
+
+.selected-course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selected-course-card {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.selected-course-main {
+  margin-bottom: 6px;
+}
+
+.selected-course-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.selected-course-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.selected-course-sessions {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.selected-course-actions {
+  text-align: right;
 }
 
 .schedule-container {
@@ -1511,7 +1633,7 @@ export default {
 
 .course-block {
   border: none;
-  border-left: 3px solid;
+  border-left: none;
   border-radius: 6px;
   padding: 6px 8px;
   margin: 1px;
@@ -1562,7 +1684,6 @@ export default {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   z-index: 20;
-  border-left-width: 4px;
 }
 
 .course-block.has-conflict {
@@ -1969,6 +2090,20 @@ export default {
   .my-courses {
     padding: 15px;
   }
+
+  .schedule-layout {
+    flex-direction: column;
+  }
+
+  .schedule-main {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .schedule-sidebar {
+    max-width: 100%;
+    width: 100%;
+  }
   
   .header {
     flex-direction: column;
@@ -2311,7 +2446,8 @@ export default {
 }
 
 .progress-track-wrapper {
-  flex: 1; /* 占据剩余空间 */
+  flex: 1.5; /* 占据更多空间，让进度条更长 */
+  min-width: 200px;
   display: flex;
   align-items: center;
 }
