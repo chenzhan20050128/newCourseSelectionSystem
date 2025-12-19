@@ -72,11 +72,11 @@
           <template #extra>
             <div v-if="activeTab === 'myCourses' && user?.userType === 'student'" class="tabs-extra-myCourses">
               <div class="header-stats">
-                <span class="stat-item">共 <strong>{{ myCoursesCount }}</strong> 门</span>
+                <span class="stat-item">共 <strong class="count-number">{{ myCoursesCount }}</strong> 门</span>
                 <span class="stat-divider">|</span>
-                <span class="stat-item">总学分 <strong>{{ myCoursesCredits }}</strong> 分</span>
+                <span class="stat-item">总学分 <strong class="credit-number">{{ myCoursesCredits }}</strong> 分</span>
                 <span class="stat-divider">|</span>
-                <span class="stat-item">冲突 <strong>{{ myCoursesConflicts }}</strong> 个</span>
+                <span class="stat-item">冲突 <strong class="conflict-number">{{ myCoursesConflicts }}</strong> 个</span>
               </div>
               <button
                 class="btn-refresh"
@@ -563,15 +563,26 @@ export default {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: 16px;
   color: #666;
   white-space: nowrap;
 }
 
 .stat-item strong {
-  color: #7C1F89;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
+}
+
+.count-number {
+  color: #7C1F89 !important; /* 紫色 */
+}
+
+.credit-number {
+  color: #FFB300 !important; /* 黄色 (C:0, M:30, Y:100, K:0) */
+}
+
+.conflict-number {
+  color: #FF0000 !important; /* 红色 */
 }
 
 .stat-divider {
@@ -580,13 +591,13 @@ export default {
 }
 
 .btn-refresh {
-  padding: 8px 20px;
+  padding: 6px 16px;
   background: #7C1F89;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(124, 31, 137, 0.3);

@@ -21,10 +21,9 @@
       >
         智能选课
       </button>
-
-      <div class="tabs-extra">
-        <slot name="extra" />
-      </div>
+    </div>
+    <div class="tabs-extra" :class="{ 'tabs-extra-left': activeTab === 'smartSelection' }">
+      <slot name="extra" />
     </div>
   </div>
 </template>
@@ -55,6 +54,8 @@ export default {
   border-bottom: 2px solid #e0e0e0;
   padding-bottom: 0;
   margin-bottom: 0px;
+  position: relative;
+  width: 100%;
 }
 
 .tabs-left {
@@ -90,6 +91,16 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: 12px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tabs-extra-left {
+  position: static;
+  transform: none;
+  left: auto;
+  top: auto;
 }
 </style>
