@@ -173,6 +173,11 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     public List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds) {
+        return listCoursesByIds(courseIds, null);
+    }
+
+    @Override
+    public List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds, Long studentId) {
         if (CollectionUtils.isEmpty(courseIds)) {
             return Collections.emptyList();
         }
@@ -181,9 +186,27 @@ public class CourseServiceImpl implements CourseService {
             return Collections.emptyList();
         }
         Map<Long, List<CourseSessionDTO>> sessionGroup = loadSessions(courseIds);
+
+        Set<Long> enrolledCourseIds = Collections.emptySet();
+        if (studentId != null) {
+            List<Enrollment> enrollments = enrollmentMapper.selectList(
+                    new LambdaQueryWrapper<Enrollment>().eq(Enrollment::getStudentId, studentId)
+            );
+            if (!CollectionUtils.isEmpty(enrollments)) {
+                enrolledCourseIds = enrollments.stream().map(Enrollment::getCourseId).collect(Collectors.toSet());
+            }
+        }
+        Set<Long> finalEnrolledIds = enrolledCourseIds;
+
         return courses.stream()
-                .map(course -> assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
-                        course.getEnrolledCount() != null ? course.getEnrolledCount() : 0))
+                .map(course -> {
+                    CourseWithSessionsDTO dto = assembleCourseDTO(course, sessionGroup.get(course.getCourseId()),
+                            course.getEnrolledCount() != null ? course.getEnrolledCount() : 0);
+                    if (finalEnrolledIds.contains(course.getCourseId())) {
+                        dto.setIsEnrolled(true);
+                    }
+                    return dto;
+                })
                 .collect(Collectors.toList());
     }
 

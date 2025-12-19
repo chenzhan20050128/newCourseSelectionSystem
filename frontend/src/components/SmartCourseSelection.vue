@@ -48,8 +48,31 @@
               </div>
               <div class="content-col">
                 <div class="message-bubble" :class="msg.role">
-                  <div v-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                  <div v-if="msg.role === 'assistant'">
+                    <div v-if="msg.isThinking" class="thinking-row">
+                      <span class="thinking-spinner"></span>
+                      <span>AI正在思考中…</span>
+                    </div>
+                    <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                  </div>
                   <div v-else class="user-text">{{ msg.content }}</div>
+                </div>
+
+                <!-- Recommended Courses List -->
+                <div v-if="msg.recommendedCourses && msg.recommendedCourses.length > 0" class="recommended-courses-list">
+                  <div class="recommendation-title">推荐课程详情：</div>
+                  <div class="course-card-wrapper" v-for="course in msg.recommendedCourses" :key="course.courseId">
+                    <CourseCard 
+                      :course="course"
+                      :studentId="studentId"
+                      :isEnrolled="course.isEnrolled"
+                      :isEnrolling="enrollingCourses.has(course.courseId)"
+                      :isDropping="droppingCourses.has(course.courseId)"
+                      :message="operationMessage[course.courseId]"
+                      @enroll="handleEnroll"
+                      @drop="handleDrop"
+                    />
+                  </div>
                 </div>
                 
                 <!-- Action Buttons for Assistant Messages -->
@@ -121,13 +144,67 @@ import { ref, inject, nextTick, onUnmounted, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { User, Position, ArrowRight, CopyDocument, Document, VideoPause, Plus } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { getCourseRecommendationStream } from '../api/courseApi'
+import { getCourseRecommendationStream, getCoursesByIds, enrollCourse, dropCourse } from '../api/courseApi'
+import CourseCard from './CourseCard.vue'
 
 const studentId = inject('studentId')
 const messages = ref([])
 const inputMessage = ref('')
 const isStreaming = ref(false)
 const scrollbarRef = ref(null)
+const enrollingCourses = ref(new Set())
+const droppingCourses = ref(new Set())
+const operationMessage = ref({})
+
+const setOperationMessage = (courseId, type, message) => {
+  operationMessage.value[courseId] = { type, message }
+  setTimeout(() => clearOperationMessage(courseId), 5000)
+}
+const clearOperationMessage = (courseId) => { if (operationMessage.value[courseId]) delete operationMessage.value[courseId] }
+
+const handleEnroll = async (course) => {
+  if (!studentId.value) { ElMessage.error('请先输入学生ID'); return }
+  enrollingCourses.value.add(course.courseId)
+  clearOperationMessage(course.courseId)
+  const batchId = localStorage.getItem('selectedBatchId')
+  if (!batchId) {
+    ElMessage.error('请先选择选课轮次')
+    enrollingCourses.value.delete(course.courseId)
+    return
+  }
+  try {
+    const response = await enrollCourse({ studentId: studentId.value, courseId: course.courseId, batchId: Number(batchId) })
+    if (response.success) {
+      setOperationMessage(course.courseId, 'success', response.message)
+      if (response.warn) setTimeout(() => setOperationMessage(course.courseId, 'warning', response.warn), 2000)
+      course.enrolledCount = (course.enrolledCount || 0) + 1
+      course.isEnrolled = true
+    } else {
+      setOperationMessage(course.courseId, 'error', response.message)
+    }
+  } catch (err) {
+    setOperationMessage(course.courseId, 'error', err.message || '选课失败')
+  } finally { enrollingCourses.value.delete(course.courseId) }
+}
+
+const handleDrop = async (course) => {
+  if (!studentId.value) { ElMessage.error('请先输入学生ID'); return }
+  droppingCourses.value.add(course.courseId)
+  clearOperationMessage(course.courseId)
+  try {
+    const response = await dropCourse({ studentId: studentId.value, courseId: course.courseId })
+    if (response.success) {
+      setOperationMessage(course.courseId, 'success', response.message)
+      course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
+      course.isEnrolled = false
+    } else {
+      setOperationMessage(course.courseId, 'error', response.message)
+    }
+  } catch (err) {
+    setOperationMessage(course.courseId, 'error', err.message || '退课失败')
+  } finally { droppingCourses.value.delete(course.courseId) }
+}
+
 let cancelStream = null
 
 const quickPrompts = [
@@ -332,7 +409,9 @@ const sendMessage = () => {
   const assistantMsgIndex = messages.value.length
   messages.value.push({
     role: 'assistant',
-    content: ''
+    content: '',
+    isThinking: true,
+    recommendedCourses: []
   })
 
   isStreaming.value = true
@@ -346,20 +425,49 @@ const sendMessage = () => {
     request,
     (chunk) => {
       // Append chunk to current message
+      if (messages.value[assistantMsgIndex]?.isThinking) {
+        messages.value[assistantMsgIndex].isThinking = false
+      }
       messages.value[assistantMsgIndex].content += chunk
       scrollToBottom()
     },
     (err) => {
       console.error(err)
       ElMessage.error('获取推荐失败: ' + err.message)
+      if (messages.value[assistantMsgIndex]) {
+        messages.value[assistantMsgIndex].isThinking = false
+      }
       messages.value[assistantMsgIndex].content += '\n\n[发生错误，请重试]'
       isStreaming.value = false
       cancelStream = null
       scrollToBottom()
     },
-    () => {
+    async () => {
       isStreaming.value = false
       cancelStream = null
+
+      if (messages.value[assistantMsgIndex]) {
+        messages.value[assistantMsgIndex].isThinking = false
+      }
+      
+      // 提取课程ID并查询
+      const text = messages.value[assistantMsgIndex].content
+      // 匹配所有连续数字，且长度在4到10位之间（假设课程ID是这样的）
+      const matches = text.match(/\b\d{4,10}\b/g)
+      
+      if (matches && matches.length > 0) {
+        const uniqueIds = [...new Set(matches.map(id => Number(id)))]
+        try {
+           const courses = await getCoursesByIds({ courseIds: uniqueIds, studentId: studentId.value })
+           if (courses && courses.length > 0) {
+             messages.value[assistantMsgIndex].recommendedCourses = courses
+             scrollToBottom()
+           }
+        } catch (e) {
+          console.error('Failed to fetch recommended courses details', e)
+        }
+      }
+      
       scrollToBottom()
     }
   )
@@ -582,6 +690,16 @@ watch(
   gap: 8px;
 }
 
+/* 仅扩大 AI 回复气泡右侧宽度：让其可延伸到与用户气泡同一右边界 */
+.message-row.assistant .content-col {
+  flex: 1;
+  max-width: 100%;
+}
+
+.message-row.assistant .message-bubble.assistant {
+  width: 100%;
+}
+
 .message-bubble {
   padding: 12px 16px;
   border-radius: 12px;
@@ -602,6 +720,30 @@ watch(
   color: #333;
   border-top-left-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #666;
+  font-size: 14px;
+}
+
+.thinking-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  border-top-color: #7C1F89;
+  animation: thinking-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .user-text {
@@ -737,6 +879,29 @@ watch(
   text-align: center;
   font-size: 12px;
   color: #999;
+}
+
+.recommended-courses-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.recommendation-title {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.course-card-wrapper {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 </style>
 

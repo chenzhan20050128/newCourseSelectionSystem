@@ -59,4 +59,17 @@ public class CourseController {
     public List<Object> getAttributeValues(@Valid @RequestBody CourseAttributeQueryRequest request) {
         return courseService.getAttributeValues(request);
     }
+
+    /**
+     * 根据课程ID列表查询课程详情
+     */
+    @PostMapping("/ids")
+    public List<CourseWithSessionsDTO> getCoursesByIds(@RequestBody CourseIdsRequest request) {
+        return courseService.listCoursesByIds(request.courseIds, request.studentId);
+    }
+
+    public static class CourseIdsRequest {
+        public List<Long> courseIds;
+        public Long studentId;
+    }
 }

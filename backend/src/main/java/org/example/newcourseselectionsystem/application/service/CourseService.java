@@ -40,4 +40,9 @@ public interface CourseService {
      * 根据课程ID列表批量查询课程并携带节次，封装为DTO
      */
     List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds);
+
+    /**
+     * 根据课程ID列表批量查询课程并携带节次，封装为DTO（支持学生ID判断已选）
+     */
+    List<CourseWithSessionsDTO> listCoursesByIds(List<Long> courseIds, Long studentId);
 }

@@ -234,3 +234,12 @@ export function getCourseRecommendationStream(request, onMessage, onError, onCom
   }
 }
 
+/**
+ * 根据课程ID列表查询课程详情
+ * @param {Object} params - { courseIds: [], studentId: ... }
+ * @returns {Promise<Array>} 课程列表
+ */
+export function getCoursesByIds(params) {
+  return api.post('/courses/ids', params)
+}
+
