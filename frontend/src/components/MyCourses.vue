@@ -1,45 +1,11 @@
 <template>
   <div class="my-courses">
-    <div class="header">
-      <div class="header-left">
-        <h2>我的课程</h2>
-        <div v-if="courses.length > 0" class="header-stats">
-          <span class="stat-item">共 <strong>{{ courses.length }}</strong> 门</span>
-          <span class="stat-divider">|</span>
-          <span class="stat-item">总学分 <strong>{{ totalCredits }}</strong> 分</span>
-        </div>
-      </div>
-      <div class="header-actions">
-        <button 
-          class="btn-list-view" 
-          @click="handleRecommendationsButtonClick"
-          :disabled="loading || !studentId"
-        >
-          查看选课建议
-        </button>
-        <button 
-          class="btn-list-view" 
-          @click="handleShowSelectedCourses"
-          :disabled="loading || !studentId"
-        >
-          查看已选课程
-        </button>
-        <button 
-          class="btn-refresh" 
-          @click="loadCourses"
-          :disabled="loading || !studentId"
-        >
-          {{ loading ? '加载中...' : '刷新' }}
-        </button>
-      </div>
-    </div>
-
     <div v-if="!studentId" class="no-student-id">
       <p>请先在上方输入学生ID</p>
     </div>
 
-    <div v-if="error" class="error-message">
-      {{ error }}
+    <div v-if="displayError" class="error-message">
+      {{ displayError }}
     </div>
 
     <div v-if="successMessage" class="success-message-toast">
@@ -152,160 +118,9 @@
           </div>
         </div>
       </div>
-      <div class="schedule-sidebar">
-        <div 
-          class="sidebar-section recommendations-section" 
-          data-section="recommendations"
-          v-show="activeSidebarPanel === 'recommendations'"
-        >
-          <div class="sidebar-section-header">
-            <h3>选课推荐</h3>
-            <button 
-              class="btn-link" 
-              @click="fetchRecommendations"
-              :disabled="loadingRecommendations || !studentId"
-            >
-              {{ loadingRecommendations ? '加载中...' : '刷新' }}
-            </button>
-          </div>
-          <div v-if="!studentId" class="sidebar-hint">
-            请输入学生ID后查看推荐
-          </div>
-          <div v-else>
-            <div v-if="loadingRecommendations" class="sidebar-loading">获取建议中...</div>
-            <div v-else-if="recommendationsError" class="error-message compact">
-              {{ recommendationsError }}
-            </div>
-            <div v-else-if="creditProgress.length === 0" class="sidebar-empty">
-              暂无进度数据，点击上方按钮尝试刷新
-            </div>
-            <div v-else class="progress-list">
-              <div v-for="item in creditProgress" :key="item.type" class="progress-item-container">
-                <div class="progress-row">
-                  <div class="progress-label">{{ item.type }}</div>
-                  <div class="progress-track-wrapper">
-                    <div class="progress-track">
-                      <div 
-                        class="progress-bar"
-                        :class="{ 'bar-green': item.earned >= item.required, 'bar-red': item.earned < item.required }"
-                        :style="{ width: getProgressPercent(item.earned, item.required) + '%' }"
-                      ></div>
-                    </div>
-                  </div>
-                  <div class="progress-value">
-                    <span v-if="item.earned < item.required">
-                      {{ item.earned }}/{{ item.required }}
-                    </span>
-                    <span v-else class="status-ok">
-                      已完成
-                    </span>
-                  </div>
-                  <div class="progress-action">
-                    <button 
-                      v-if="item.earned < item.required" 
-                      class="btn-recommend"
-                      @click="toggleCategory(item.type)"
-                    >
-                      {{ expandedCategory === item.type ? '收起' : '推荐课程' }}
-                    </button>
-                  </div>
-                </div>
-
-                <div v-if="expandedCategory === item.type" class="recommendation-dropdown">
-                  <div v-if="!recommendations[item.type] || recommendations[item.type].length === 0" class="no-recs-hint">
-                    该类别暂无推荐课程
-                  </div>
-                  <div v-else class="course-grid">
-                    <div 
-                      v-for="course in recommendations[item.type]" 
-                      :key="course.courseId" 
-                      class="course-card mini-card"
-                    >
-                      <div class="course-header">
-                        <span class="course-name">{{ course.courseName }}</span>
-                        <span class="credits">{{ course.credits }} 分</span>
-                      </div>
-                      <div class="course-info compact">
-                        <p><strong>老师:</strong> {{ course.instructorName }}</p>
-                        <p><strong>时间:</strong> 
-                          <span v-for="(session, idx) in course.sessions" :key="idx">
-                            {{ session.weekday }}{{ session.startPeriod }}-{{ session.endPeriod }} 
-                          </span>
-                        </p>
-                        <p><strong>容量:</strong> {{ course.enrolledCount }}/{{ course.capacity }}</p>
-                      </div>
-                      <div v-if="operationMessage[course.courseId]" 
-                        :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
-                        {{ operationMessage[course.courseId].message }}
-                      </div>
-                      <div class="course-actions">
-                        <button 
-                          class="btn-enroll small"
-                          @click="handleEnrollFromDialog(course)"
-                          :disabled="!studentId || enrollingCourses.has(course.courseId)"
-                        >
-                          {{ enrollingCourses.has(course.courseId) ? '...' : '选课' }}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div 
-          class="sidebar-section selected-section" 
-          data-section="selected-courses"
-          v-show="activeSidebarPanel === 'selected'"
-        >
-          <div class="sidebar-section-header">
-            <h3>已选课程</h3>
-          </div>
-          <div v-if="courses.length === 0" class="sidebar-empty">
-            您还没有选课
-          </div>
-          <div v-else class="selected-course-list">
-            <div 
-              v-for="course in courses" 
-              :key="course.courseId" 
-              class="selected-course-card"
-            >
-              <div class="selected-course-main">
-                <div class="selected-course-name">{{ course.courseName }}</div>
-              </div>
-              <div class="selected-course-meta">
-                <span>{{ course.campus || '-' }}</span>
-                <span>{{ course.credits }} 学分</span>
-              </div>
-              <div class="selected-course-sessions">
-                <div 
-                  v-for="session in course.sessions" 
-                  :key="session.sessionId" 
-                  class="session-item"
-                >
-                  {{ session.weekday }} {{ session.startPeriod }}-{{ session.endPeriod }}节
-                  <span v-if="session.weekType === 1" class="week-tag single">单</span>
-                  <span v-if="session.weekType === 2" class="week-tag double">双</span>
-                </div>
-              </div>
-              <div class="selected-course-actions">
-                <button 
-                  class="btn-drop-small"
-                  @click="handleDrop(course)"
-                  :disabled="droppingCourses.has(course.courseId)"
-                >
-                  {{ droppingCourses.has(course.courseId) ? '退课中...' : '退课' }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <div v-if="!loading && courses.length === 0 && studentId && !error" class="no-results">
+    <div v-if="!loading && courses.length === 0 && studentId && !displayError" class="no-results">
       您还没有选课
     </div>
 
@@ -430,21 +245,35 @@
 </template>
 
 <script>
-import { ref, computed, inject, watch, onMounted } from 'vue'
-import { getStudentCourses, dropCourse, searchCoursesBySession, enrollCourse, getRecommendations } from '../api/courseApi'
+import { ref, computed, inject, onMounted } from 'vue'
+import { dropCourse, searchCoursesBySession, enrollCourse } from '../api/courseApi'
 
 export default {
   name: 'MyCourses',
-  setup() {
+  props: {
+    courses: {
+      type: Array,
+      default: () => []
+    },
+    loading: {
+      type: Boolean,
+      default: false
+    },
+    error: {
+      type: String,
+      default: ''
+    }
+  },
+  emits: ['refresh'],
+  setup(props, { emit }) {
     // 获取学生ID
     const studentId = inject('studentId')
     
-    const courses = ref([])
-    const loading = ref(false)
-    const error = ref('')
+    const courses = computed(() => props.courses || [])
+    const loading = computed(() => props.loading)
+    const displayError = computed(() => props.error || '')
     const selectedCourse = ref(null)
     const successMessage = ref('')
-    const activeSidebarPanel = ref('recommendations')
     
     // 退课相关状态
     const droppingCourses = ref(new Set())
@@ -458,78 +287,6 @@ export default {
     const queryTimeInfo = ref('')
     const queryWeekday = ref('')
     const queryPeriod = ref(null)
-    
-    // 选课建议相关状态
-    const recommendations = ref([])
-    const loadingRecommendations = ref(false)
-    const recommendationsError = ref('')
-    // 新增：学分进度数据
-    const creditProgress = ref([])
-    // 新增：当前展开的推荐课程分类（控制显示哪个分类的课程列表）
-    const expandedCategory = ref('')
-
-    const fetchRecommendations = async () => {
-      if (!studentId.value) return
-      
-      loadingRecommendations.value = true
-      recommendationsError.value = ''
-      // 重置状态
-      expandedCategory.value = ''
-      
-      try {
-        const data = await getRecommendations({ studentId: parseInt(studentId.value) })
-        
-        // 1. 处理学分进度
-        if (data && data.creditProgress) {
-          creditProgress.value = data.creditProgress
-        } else {
-          creditProgress.value = []
-        }
-
-        // 2. 处理推荐课程字典 (保持 Object 结构以便通过 key 查找)
-        // 注意：这里不需要像之前那样转成数组了，因为我们是通过点击进度条后的按钮，
-        // 根据 type 去这个对象里取数据的
-        if (data && data.recommendations) {
-          recommendations.value = data.recommendations
-        } else {
-          recommendations.value = {}
-        }
-
-      } catch (err) {
-        console.error('获取选课建议失败:', err)
-        recommendationsError.value = err.message || '获取选课建议失败'
-      } finally {
-        loadingRecommendations.value = false
-      }
-    }
-
-    const handleRecommendationsButtonClick = () => {
-      if (!studentId.value) return
-      activeSidebarPanel.value = 'recommendations'
-      fetchRecommendations()
-    }
-
-    const handleShowSelectedCourses = () => {
-      activeSidebarPanel.value = 'selected'
-    }
-
-    // 新增：切换展开/收起推荐课程
-    const toggleCategory = (categoryType) => {
-      if (expandedCategory.value === categoryType) {
-        expandedCategory.value = '' // 如果当前已展开，则收起
-      } else {
-        expandedCategory.value = categoryType // 展开新的
-      }
-    }
-
-    // 新增：计算进度百分比
-    const getProgressPercent = (earned, required) => {
-      if (required === 0) return 100
-      const percent = (earned / required) * 100
-      return Math.min(percent, 100) // 不超过100%
-    }
-
-
     const enrollingCourses = ref(new Set())
     
     // 确认对话框状态
@@ -567,66 +324,14 @@ export default {
       return campuses.size > 1
     })
 
-    // 颜色池 - 50种丰富多彩的颜色
-    const colorPalette = [
-      { bg: '#FFE5E7', border: '#FF6B81', text: '#333' }, { bg: '#E0F7FA', border: '#00BCD4', text: '#333' },
-      { bg: '#FFF9E6', border: '#FFB74D', text: '#333' }, { bg: '#E8F5E9', border: '#66BB6A', text: '#333' },
-      { bg: '#F3E5F5', border: '#9C27B0', text: '#333' }, { bg: '#E3F2FD', border: '#42A5F5', text: '#333' },
-      { bg: '#FFF3E0', border: '#FF9800', text: '#333' }, { bg: '#FCE4EC', border: '#EC407A', text: '#333' },
-      { bg: '#E8EAF6', border: '#5C6BC0', text: '#333' }, { bg: '#F1F8E9', border: '#9CCC65', text: '#333' },
-      { bg: '#FFF8E1', border: '#FFCA28', text: '#333' }, { bg: '#E0F2F1', border: '#26A69A', text: '#333' },
-      { bg: '#FFEBEE', border: '#EF5350', text: '#333' }, { bg: '#F9FBE7', border: '#D4E157', text: '#333' },
-      { bg: '#EDE7F6', border: '#7E57C2', text: '#333' }, { bg: '#FBE9E7', border: '#FF7043', text: '#333' },
-      { bg: '#E1F5FE', border: '#29B6F6', text: '#333' }, { bg: '#F3E5F5', border: '#AB47BC', text: '#333' },
-      { bg: '#FFF9C4', border: '#FDD835', text: '#333' }, { bg: '#E8F5E9', border: '#4CAF50', text: '#333' },
-      { bg: '#FFE0B2', border: '#FB8C00', text: '#333' }, { bg: '#F8BBD0', border: '#F06292', text: '#333' },
-      { bg: '#D1C4E9', border: '#7E57C2', text: '#333' }, { bg: '#C5CAE9', border: '#5C6BC0', text: '#333' },
-      { bg: '#BBDEFB', border: '#42A5F5', text: '#333' }, { bg: '#B2EBF2', border: '#26C6DA', text: '#333' },
-      { bg: '#B2DFDB', border: '#26A69A', text: '#333' }, { bg: '#C8E6C9', border: '#66BB6A', text: '#333' },
-      { bg: '#DCEDC8', border: '#9CCC65', text: '#333' }, { bg: '#F0F4C3', border: '#D4E157', text: '#333' },
-      { bg: '#FFF9C4', border: '#FFEE58', text: '#333' }, { bg: '#FFECB3', border: '#FFCA28', text: '#333' },
-      { bg: '#FFE0B2', border: '#FFA726', text: '#333' }, { bg: '#FFCCBC', border: '#FF7043', text: '#333' },
-      { bg: '#D7CCC8', border: '#8D6E63', text: '#333' }, { bg: '#CFD8DC', border: '#78909C', text: '#333' },
-      { bg: '#E1BEE7', border: '#BA68C8', text: '#333' }, { bg: '#CE93D8', border: '#AB47BC', text: '#fff' },
-      { bg: '#B39DDB', border: '#9575CD', text: '#fff' }, { bg: '#9FA8DA', border: '#7986CB', text: '#fff' },
-      { bg: '#90CAF9', border: '#64B5F6', text: '#333' }, { bg: '#81D4FA', border: '#4FC3F7', text: '#333' },
-      { bg: '#80DEEA', border: '#4DD0E1', text: '#333' }, { bg: '#80CBC4', border: '#4DB6AC', text: '#333' },
-      { bg: '#A5D6A7', border: '#81C784', text: '#333' }, { bg: '#C5E1A5', border: '#AED581', text: '#333' },
-      { bg: '#E6EE9C', border: '#DCE775', text: '#333' }, { bg: '#FFF59D', border: '#FFF176', text: '#333' },
-      { bg: '#FFE082', border: '#FFD54F', text: '#333' }, { bg: '#FFCC80', border: '#FFB74D', text: '#333' }
-    ]
-
     /**
-     * 为课程分配颜色 - 使用哈希算法使颜色分布更随机
-     */
-    const getCourseColor = (courseId) => {
-      // 使用简单的哈希算法让颜色分布更随机
-      let hash = courseId * 2654435761 // 使用大质数
-      hash = ((hash ^ (hash >> 16)) * 0x85ebca6b) >>> 0
-      hash = ((hash ^ (hash >> 13)) * 0xc2b2ae35) >>> 0
-      hash = (hash ^ (hash >> 16)) >>> 0
-      const index = hash % colorPalette.length
-      return colorPalette[index]
-    }
-
-    /**
-     * 检查两个时间段是否重叠
-     */
-    const isTimeOverlap = (start1, end1, start2, end2) => {
-      return !(end1 < start2 || end2 < start1)
-    }
-
-    /**
-     * 检测时间冲突并生成课程块数据
+     * 生成用于渲染课程表的课程块（处理跨节次/同一时间冲突）
      */
     const generateCourseBlocks = computed(() => {
-      const sessionBlocks = [] // 存储所有session块
-      const timeSlotGroups = new Map() // 按时间段分组
-
-      // 第一步：创建所有课程块
+      // 第一步：收集所有节次块
+      const sessionBlocks = []
       courses.value.forEach(course => {
-        if (!course.sessions || course.sessions.length === 0) return
-
+        if (!course.sessions || !Array.isArray(course.sessions)) return
         course.sessions.forEach(session => {
           const sessionBlock = {
             course,
@@ -651,7 +356,7 @@ export default {
       })
 
       // 第三步：为每个weekday的课程分配列位置
-      weekdayGroups.forEach((blocks, weekday) => {
+      weekdayGroups.forEach((blocks) => {
         // 检测冲突关系
         const conflicts = new Map() // 存储每个块与哪些块冲突
         blocks.forEach(block => {
@@ -675,7 +380,7 @@ export default {
         blocks.forEach(block => {
           const conflictingBlocks = conflicts.get(block.id)
           const usedColumns = new Set()
-          
+
           // 找出冲突块已使用的列
           conflictingBlocks.forEach(conflictId => {
             const conflictBlock = blocks.find(b => b.id === conflictId)
@@ -717,6 +422,29 @@ export default {
       })
 
       return sessionBlocks
+    })
+
+    // 统计：冲突时间槽数量（同一 weekday+period 上出现 >=2 门课）
+    const conflictCount = computed(() => {
+      const cellCourseSetMap = new Map()
+      generateCourseBlocks.value.forEach(block => {
+        const start = Number(block.startPeriod)
+        const end = Number(block.endPeriod)
+        for (let p = start; p <= end; p++) {
+          const key = `${block.weekday}-${p}`
+          let set = cellCourseSetMap.get(key)
+          if (!set) {
+            set = new Set()
+            cellCourseSetMap.set(key, set)
+          }
+          set.add(block.course.courseId)
+        }
+      })
+      let count = 0
+      cellCourseSetMap.forEach(set => {
+        if (set.size > 1) count++
+      })
+      return count
     })
 
     /**
@@ -968,7 +696,7 @@ export default {
           course.enrolledCount = (course.enrolledCount || 0) + 1
           // 延迟刷新课程表
           setTimeout(() => {
-            loadCourses()
+            emit('refresh')
           }, 1000)
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
@@ -1002,30 +730,6 @@ export default {
     }
 
     /**
-     * 加载学生课程
-     */
-    const loadCourses = async () => {
-      if (!studentId.value) {
-        error.value = '请先输入学生ID'
-        return
-      }
-
-      loading.value = true
-      error.value = ''
-      courses.value = []
-
-      try {
-        const data = await getStudentCourses(studentId.value)
-        courses.value = data || []
-      } catch (err) {
-        error.value = err.message || '加载课程失败'
-        console.error('Load courses error:', err)
-      } finally {
-        loading.value = false
-      }
-    }
-
-    /**
      * 处理退课
      */
     const handleDrop = async (course) => {
@@ -1044,8 +748,8 @@ export default {
         if (response.success) {
           closeDialog()
           setTimeout(() => {
-            loadCourses()
-          }, 500)
+            emit('refresh')
+          }, 300)
         } else {
           alert(response.message || '退课失败')
         }
@@ -1066,23 +770,6 @@ export default {
       }, 0)
     })
 
-    // 监听学生ID变化，自动加载课程
-    watch(studentId, (newId) => {
-      if (newId) {
-        loadCourses()
-      } else {
-        courses.value = []
-        error.value = ''
-      }
-    })
-
-    // 组件挂载时，如果已有学生ID，自动加载
-    onMounted(() => {
-      if (studentId.value) {
-        loadCourses()
-      }
-    })
-
     // 监听ESC键关闭对话框
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -1099,18 +786,57 @@ export default {
       window.addEventListener('keydown', handleKeyDown)
     })
 
+    // 课程颜色缓存（避免重复计算，且保证同一课程颜色稳定一致）
+    const courseColorCache = new Map()
+
+    const hashStringToUint32 = (input) => {
+      const str = String(input ?? '')
+      // FNV-1a 32-bit
+      let hash = 2166136261
+      for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i)
+        hash = Math.imul(hash, 16777619)
+      }
+      return hash >>> 0
+    }
+
+    /**
+     * 获取课程颜色
+     */
+    const getCourseColor = (courseId) => {
+      const key = String(courseId ?? '')
+      const cached = courseColorCache.get(key)
+      if (cached) return cached
+
+      // 原来的做法是 parseInt(courseId) % N：当 courseId 不是纯数字、或数字分布集中时会高频撞色。
+      // 改为：对 courseId 做稳定哈希 → 生成 HSL 颜色（可组合维度更多，重复概率显著降低）。
+      const hash = hashStringToUint32(key)
+      const hue = hash % 360
+      const borderSat = 62 + ((hash >>> 8) % 18) // 62-79
+      const borderLight = 40 + ((hash >>> 16) % 12) // 40-51
+      const bgSat = 78
+      const bgLight = 92
+
+      const color = {
+        bg: `hsl(${hue}, ${bgSat}%, ${bgLight}%)`,
+        border: `hsl(${hue}, ${borderSat}%, ${borderLight}%)`,
+        text: '#333'
+      }
+      courseColorCache.set(key, color)
+      return color
+    }
+
     return {
       studentId,
       courses,
       loading,
+      displayError,
       successMessage,
-      error,
       droppingCourses,
       totalCredits,
       weekdays,
       periods,
       selectedCourse,
-      loadCourses,
       handleDrop,
       getCellBlocks,
       getBlockStyle,
@@ -1136,17 +862,7 @@ export default {
       confirmSearchCourses,
       cancelSearchCourses,
       isShowingConfirm,
-      activeSidebarPanel,
-      handleRecommendationsButtonClick,
-      handleShowSelectedCourses,
-      recommendations,
-      loadingRecommendations,
-      recommendationsError,
-      creditProgress,
-      expandedCategory,
-      toggleCategory,
-      getProgressPercent,
-      fetchRecommendations
+      getCourseColor
     }
   }
 }
@@ -1154,120 +870,9 @@ export default {
 
 <style scoped>
 .my-courses {
-  padding: 24px;
+  padding: 0px;
   background: #f8f5fa;
-  min-height: 100vh;
 }
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background: white;
-  padding: 16px 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.header h2 {
-  margin: 0;
-  color: #7C1F89;
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.header-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 15px;
-  color: #666;
-}
-
-.stat-item strong {
-  color: #7C1F89;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.stat-divider {
-  color: #ddd;
-  font-weight: 300;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.btn-list-view {
-  padding: 8px 16px;
-  background: white;
-  color: #7C1F89;
-  border: 1px solid #7C1F89;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-list-view:hover:not(:disabled) {
-  background: #f3e5f5;
-}
-
-.btn-list-view:disabled {
-  border-color: #ccc;
-  color: #999;
-  cursor: not-allowed;
-}
-
-.btn-refresh {
-  padding: 8px 20px;
-  background: #7C1F89;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(124, 31, 137, 0.3);
-}
-
-.btn-refresh:hover:not(:disabled) {
-  background: #9C27B0;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(124, 31, 137, 0.4);
-}
-
-.btn-refresh:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-.no-student-id {
-  text-align: center;
-  padding: 40px;
-  color: #6c757d;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  margin: 20px 0;
-}
-
 .error-message {
   background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
   border: 1px solid #ffb3b3;
@@ -1289,13 +894,15 @@ export default {
 
 .schedule-layout {
   display: flex;
-  gap: 20px;
+  gap: 10px;
   align-items: flex-start;
+  overflow: auto;
 }
 
 .schedule-main {
-  flex: 0 0 65%;
-  max-width: 65%;
+  flex: 1 1 100%;
+  max-width: 100%;
+  overflow: auto;
 }
 
 .schedule-sidebar {
@@ -1367,7 +974,7 @@ export default {
 .selected-course-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 1px;
 }
 
 .selected-course-card {
@@ -1407,15 +1014,16 @@ export default {
 
 .schedule-container {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: hidden;
   background: white;
-  padding: 16px;
+  padding: 4px 4px 55px 4px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 .schedule-wrapper {
-  min-width: 750px;
+  min-width: 1000px;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -1423,12 +1031,15 @@ export default {
 .schedule-grid {
   display: grid;
   grid-template-columns: 35px 55px repeat(7, 1fr);
-  grid-template-rows: 45px repeat(4, 65px) 16px repeat(4, 65px) 16px repeat(3, 65px);
+  grid-template-rows: 35px repeat(4, 57px) 16px repeat(4, 57px) 16px repeat(3, 57px);
   border: 1px solid #e0e0e0;
   background: white;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transform: scale(0.9);
+  transform-origin: top center;
+  margin-bottom: -10%;
 }
 
 .grid-header:first-child {
@@ -1541,8 +1152,8 @@ export default {
   border-right: 1px solid #e9ecef;
   border-bottom: 1px solid #e9ecef;
   position: relative;
-  padding: 3px;
-  min-height: 65px;
+  padding: 0px;
+  min-height: 57px;
   background: #fff;
   overflow: visible;
   grid-column: auto;
@@ -1634,12 +1245,12 @@ export default {
 .course-block {
   border: none;
   border-left: none;
-  border-radius: 6px;
+  border-radius: 4px;
   padding: 6px 8px;
   margin: 1px;
   cursor: pointer;
   transition: all 0.25s ease;
-  font-size: 11px;
+  font-size: 13px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   overflow: hidden;
   word-break: break-word;
@@ -1654,7 +1265,7 @@ export default {
   position: absolute;
   top: 0;
   right: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   padding: 2px 5px;
   border-bottom-left-radius: 6px;
@@ -1667,10 +1278,10 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   padding: 2px 5px;
-  border-bottom-right-radius: 6px;
+  border-bottom-right-radius: 4px;
   box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
   z-index: 2;
 }
@@ -2093,16 +1704,13 @@ export default {
 
   .schedule-layout {
     flex-direction: column;
+    overflow: hidden;
   }
 
   .schedule-main {
     flex: 1 1 100%;
     max-width: 100%;
-  }
-
-  .schedule-sidebar {
-    max-width: 100%;
-    width: 100%;
+    overflow: auto;
   }
   
   .header {

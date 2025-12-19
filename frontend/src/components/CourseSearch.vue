@@ -249,7 +249,7 @@ export default {
 
 <style scoped>
 /* 保持背景色 */
-.page-container { background-color: #F7F1FA; min-height: 100vh; padding: 24px; }
+.page-container { background-color: #F7F1FA; min-height: 100vh; padding: 10px; }
 .content-wrapper { max-width: 1100px; margin: 0 auto; } /* 稍微加宽一点点以适应均匀分布 */
 .results-card { background: white; border-radius: 12px; padding: 24px; min-height: 400px; box-shadow: 0 4px 20px rgba(124, 31, 137, 0.06); border: 1px solid rgba(255, 255, 255, 0.8); }
 .card-header { display: flex; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f0e6f5; padding-bottom: 12px; }

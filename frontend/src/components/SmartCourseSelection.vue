@@ -1,18 +1,6 @@
 <template>
   <div class="smart-course-chat-container">
     <div class="chat-main">
-      <!-- Header -->
-      <div class="chat-header">
-        <div class="header-inner">
-          <div class="header-right">
-            <el-button size="small" class="action-btn outline-btn header-btn" @click="newChat">
-              <el-icon><Plus /></el-icon>
-              新对话
-            </el-button>
-          </div>
-        </div>
-      </div>
-
       <!-- Messages Area -->
       <el-scrollbar ref="scrollbarRef" class="chat-messages" wrap-class="scrollbar-wrapper">
         <div class="messages-inner">
@@ -380,6 +368,7 @@ const newChat = () => {
   persistHistory()
 }
 
+
 const stopStreaming = () => {
   if (cancelStream) {
     cancelStream()
@@ -499,8 +488,8 @@ watch(
 
 <style scoped>
 .smart-course-chat-container {
-  height: 80vh;
-  min-height: 600px;
+  height: 100%;
+  min-height: 0;
   background-color: #fff;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
