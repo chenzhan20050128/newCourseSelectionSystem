@@ -126,68 +126,43 @@
 
     <!-- 课程详情对话框 -->
     <div v-if="selectedCourse" class="dialog-overlay" @click="closeDialog">
-      <div class="dialog-content" @click.stop>
+      <div class="dialog-content course-detail-dialog results-card" @click.stop>
         <button class="dialog-close" @click="closeDialog">×</button>
         <div class="dialog-header">
-          <h3>{{ selectedCourse.courseName }}</h3>
+          <h3>课程详情</h3>
         </div>
-        <div class="dialog-body">
-          <div class="detail-item">
-            <strong>课程ID:</strong> {{ selectedCourse.courseId }}
+        <div class="dialog-body" style="padding: 0;">
+          <div class="results-table">
+            <div class="list-header">
+              <div class="col col-info">课程信息</div>
+              <div class="col col-instructor">教师</div>
+              <div class="col col-schedule">时间 / 地点</div>
+              <div class="col col-capacity">课余量</div>
+              <div class="col col-actions">操作</div>
+            </div>
+            <div class="course-list-body">
+              <CourseCard 
+                :course="selectedCourse"
+                :student-id="studentId"
+                :is-enrolled="true"
+                :is-dropping="droppingCourses.has(selectedCourse.courseId)"
+                :message="operationMessage[selectedCourse.courseId]"
+                @drop="handleDrop"
+              />
+            </div>
           </div>
-          <div class="detail-item">
-            <strong>学分:</strong> {{ selectedCourse.credits }}
-          </div>
-          <div class="detail-item">
-            <strong>学院:</strong> {{ selectedCourse.college }}
-          </div>
-          <div class="detail-item">
-            <strong>校区:</strong> {{ selectedCourse.campus }}
-          </div>
-          <div class="detail-item">
-            <strong>教室:</strong> {{ selectedCourse.classroom }}
-          </div>
-          <div class="detail-item">
-            <strong>教师:</strong> {{ selectedCourse.instructorName || '-' }}
-          </div>
-          <div class="detail-item">
-            <strong>周次:</strong> 第{{ selectedCourse.startWeek }}周 - 第{{ selectedCourse.endWeek }}周
-          </div>
-          <div v-if="selectedCourse.description" class="detail-item">
-            <strong>描述:</strong> {{ selectedCourse.description }}
-          </div>
-          <div class="detail-item">
-            <strong>容量:</strong> {{ selectedCourse.enrolledCount || 0 }}/{{ selectedCourse.capacity }}
-          </div>
-          <div v-if="selectedCourse.sessions && selectedCourse.sessions.length > 0" class="detail-item">
-            <strong>上课时间:</strong>
-            <ul class="sessions-list">
-              <li v-for="session in selectedCourse.sessions" :key="session.sessionId">
-                {{ session.weekday }} 第{{ session.startPeriod }}-{{ session.endPeriod }}节
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div class="dialog-footer">
-          <button 
-            class="btn-drop-dialog"
-            @click="handleDrop(selectedCourse)"
-            :disabled="!studentId || droppingCourses.has(selectedCourse.courseId)"
-          >
-            {{ droppingCourses.has(selectedCourse.courseId) ? '退课中...' : '退课' }}
-          </button>
         </div>
       </div>
     </div>
 
     <!-- 可选课程列表对话框 -->
     <div v-if="showAvailableCourses" class="dialog-overlay" @click="closeAvailableCoursesDialog">
-      <div class="dialog-content available-courses-dialog" @click.stop>
+      <div class="dialog-content available-courses-dialog results-card" @click.stop>
         <button class="dialog-close" @click="closeAvailableCoursesDialog">×</button>
         <div class="dialog-header">
-          <h3>{{ queryTimeInfo }}</h3>
+          <h3>{{ queryTimeInfo }} 可选课程</h3>
         </div>
-        <div class="dialog-body">
+        <div class="dialog-body" style="padding: 0;">
           <div v-if="loadingAvailableCourses" class="loading">
             查询中...
           </div>
@@ -197,45 +172,27 @@
           <div v-else-if="availableCourses.length === 0" class="no-results">
             该时间段没有可选课程
           </div>
-          <div v-else class="available-courses-list">
-            <div v-for="course in availableCourses" :key="course.courseId" class="course-card">
-              <div class="course-header">
-                <span class="course-id">ID: {{ course.courseId }}</span>
-                <span class="course-name">{{ course.courseName }}</span>
-                <span class="credits">{{ course.credits }} 学分</span>
-              </div>
-              <div class="course-info">
-                <p><strong>学院:</strong> {{ course.college }}</p>
-                <p><strong>校区:</strong> {{ course.campus }}</p>
-                <p><strong>教室:</strong> {{ course.classroom }}</p>
-                <p><strong>教师:</strong> {{ course.instructorName || '-' }}</p>
-                <p><strong>周次:</strong> 第{{ course.startWeek }}周 - 第{{ course.endWeek }}周</p>
-                <p v-if="course.description"><strong>描述:</strong> {{ course.description }}</p>
-              </div>
-              <div v-if="course.sessions && course.sessions.length > 0" class="sessions">
-                <strong>上课时间:</strong>
-                <ul>
-                  <li v-for="session in course.sessions" :key="session.sessionId">
-                    {{ session.weekday }} 第{{ session.startPeriod }}-{{ session.endPeriod }}节
-                  </li>
-                </ul>
-              </div>
-              <div v-if="operationMessage[course.courseId]" 
-                   :class="['operation-message', `message-${operationMessage[course.courseId].type}`]">
-                {{ operationMessage[course.courseId].message }}
-              </div>
-              <div class="course-actions">
-                <p class="capacity-info">
-                  <strong>容量:</strong> {{ course.enrolledCount || 0 }}/{{ course.capacity }}
-                </p>
-                <button 
-                  class="btn-enroll"
-                  @click="handleEnrollFromDialog(course)"
-                  :disabled="!studentId || enrollingCourses.has(course.courseId)"
-                >
-                  {{ enrollingCourses.has(course.courseId) ? '选课中...' : '选课' }}
-                </button>
-              </div>
+          <div v-else class="results-table">
+            <div class="list-header">
+              <div class="col col-info">课程信息</div>
+              <div class="col col-instructor">教师</div>
+              <div class="col col-schedule">时间 / 地点</div>
+              <div class="col col-capacity">课余量</div>
+              <div class="col col-actions">操作</div>
+            </div>
+            <div class="course-list-body">
+              <CourseCard 
+                v-for="course in availableCourses" 
+                :key="course.courseId" 
+                :course="course"
+                :student-id="studentId"
+                :is-enrolled="courses.some(c => c.courseId === course.courseId)"
+                :is-enrolling="enrollingCourses.has(course.courseId)"
+                :is-dropping="droppingCourses.has(course.courseId)"
+                :message="operationMessage[course.courseId]"
+                @enroll="handleEnrollFromDialog"
+                @drop="handleDrop"
+              />
             </div>
           </div>
         </div>
@@ -247,9 +204,11 @@
 <script>
 import { ref, computed, inject, onMounted } from 'vue'
 import { dropCourse, searchCoursesBySession, enrollCourse } from '../api/courseApi'
+import CourseCard from './CourseCard.vue'
 
 export default {
   name: 'MyCourses',
+  components: { CourseCard },
   props: {
     courses: {
       type: Array,
@@ -597,7 +556,7 @@ export default {
 
       try {
         const data = await searchCoursesBySession({
-          weekday: weekday,
+          weekdays: [weekday],
           startPeriod: period,
           endPeriod: period
         })
@@ -746,15 +705,22 @@ export default {
         })
 
         if (response.success) {
-          closeDialog()
+          setOperationMessage(course.courseId, 'success', response.message)
+          // 更新课程的已选人数
+          course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
+          // 退课成功后，如果它在 selectedCourse 中，也触发一下提示或关闭
+          if (selectedCourse.value && selectedCourse.value.courseId === course.courseId) {
+             // 稍后自动关闭
+             setTimeout(closeDialog, 1500)
+          }
           setTimeout(() => {
             emit('refresh')
           }, 300)
         } else {
-          alert(response.message || '退课失败')
+          setOperationMessage(course.courseId, 'error', response.message || '退课失败')
         }
       } catch (err) {
-        alert(err.message || '退课失败')
+        setOperationMessage(course.courseId, 'error', err.message || '退课失败')
         console.error('Drop error:', err)
       } finally {
         droppingCourses.value.delete(course.courseId)
@@ -873,6 +839,16 @@ export default {
   padding: 0px;
   background: #f8f5fa;
 }
+.no-student-id {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  color: #909399;
+  border: 1px dashed #dcdfe6;
+  margin: 20px 0;
+}
+
 .error-message {
   background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
   border: 1px solid #ffb3b3;
@@ -891,6 +867,21 @@ export default {
   font-size: 16px;
   font-weight: 500;
 }
+
+/* 引入首页选课页面的样式 */
+.results-card { background: white; border-radius: 12px; padding: 0; min-height: auto; box-shadow: 0 4px 20px rgba(124, 31, 137, 0.06); border: 1px solid rgba(255, 255, 255, 0.8); overflow: hidden; }
+.list-header { display: flex; background: #FAF4FC; padding: 12px 16px; color: #6a5acd; font-weight: 600; font-size: 13px; border-bottom: 1px solid #efe5f5; }
+.course-list-body { border: none; background: #fff; }
+
+.col { 
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+.col-info      { flex: 2.5; min-width: 200px; } 
+.col-instructor{ flex: 1;   min-width: 100px; } 
+.col-schedule  { flex: 1.8; min-width: 180px; }
+.col-capacity  { flex: 1.2; min-width: 120px; }
+.col-actions   { flex: 0 0 100px; text-align: center; }
 
 .schedule-layout {
   display: flex;
@@ -1450,7 +1441,7 @@ export default {
   border-radius: 12px;
   width: 90%;
   max-width: 600px;
-  max-height: 80vh;
+  max-height: 75vh;
   overflow-y: auto;
   position: relative;
   box-shadow: 0 10px 40px rgba(102, 126, 234, 0.2);
@@ -1483,18 +1474,18 @@ export default {
 }
 
 .dialog-header {
-  padding: 20px 50px 15px 20px;
+  padding: 15px 40px 12px 15px;
   border-bottom: 1px solid #eee;
 }
 
 .dialog-header h3 {
   margin: 0;
   color: #333;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .dialog-body {
-  padding: 20px;
+  padding: 15px;
 }
 
 .detail-item {
@@ -1566,137 +1557,34 @@ export default {
   }
 }
 
-/* 可选课程对话框样式 */
+/* 对话框特定样式 */
+.course-detail-dialog {
+  max-width: 780px !important;
+  width: 85% !important;
+  max-height: 60vh !important;
+}
+
+
 .available-courses-dialog {
-  max-width: 800px;
-  max-height: 85vh;
+  max-width: 780px !important;
+  width: 85% !important;
+  max-height: 65vh !important;
 }
 
-.available-courses-list {
-  max-height: 60vh;
-  overflow-y: auto;
+.results-table {
+  width: 100%;
 }
 
-.course-card {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 15px;
-  margin-bottom: 15px;
-  background: #fafafa;
+.no-results {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  color: #909399;
+  border: 1px dashed #dcdfe6;
+  margin: 20px 0;
 }
 
-.course-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eee;
-}
-
-.course-id {
-  color: #999;
-  font-size: 12px;
-}
-
-.course-name {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.credits {
-  color: #1890ff;
-  font-weight: bold;
-}
-
-.course-info {
-  margin-bottom: 10px;
-}
-
-.course-info p {
-  margin: 5px 0;
-  color: #666;
-}
-
-.sessions {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #eee;
-}
-
-.sessions ul {
-  margin-top: 5px;
-  padding-left: 20px;
-}
-
-.sessions li {
-  margin: 3px 0;
-  color: #666;
-}
-
-.course-actions {
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.capacity-info {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.btn-enroll {
-  padding: 8px 16px;
-  background: #52c41a;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.btn-enroll:hover:not(:disabled) {
-  background: #73d13d;
-}
-
-.btn-enroll:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.operation-message {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  animation: fadeIn 0.3s;
-}
-
-.message-success {
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
-  color: #52c41a;
-}
-
-.message-error {
-  background: #fff2f0;
-  border: 1px solid #ffccc7;
-  color: #ff4d4f;
-}
-
-.message-warning {
-  background: #fffbe6;
-  border: 1px solid #ffe58f;
-  color: #faad14;
-}
-
-/* 响应式设计 - 平板和手机 */
 @media (max-width: 1024px) {
   .my-courses {
     padding: 15px;
