@@ -52,31 +52,49 @@
           {{ message.message }}
         </div>
       </transition>
-      <button class="btn btn-action btn-enroll" v-if="!isEnrolled" @click="$emit('enroll', course)" :disabled="!canEnroll">
+      <button class="btn btn-action btn-enroll" v-if="!isEnrolled" @click="handleEnrollClick" :disabled="!canEnroll">
         {{ isEnrolling ? '...' : '选课' }}
       </button>
-      <button class="btn btn-action btn-drop" v-else @click="$emit('drop', course)" :disabled="!canDrop">
+      <button class="btn btn-action btn-drop" v-else @click="handleDropClick" :disabled="!canDrop">
         {{ isDropping ? '...' : '退课' }}
       </button>
     </div>
   </div>
+
+  <ConfirmDialog
+    :visible="showDialog"
+    :title="dialogTitle"
+    :message="dialogMessage"
+    :confirm-text="dialogConfirmText"
+    :type="dialogType"
+    :course="course"
+    :conflicts="conflictList"
+    :capacity-warning="capacityWarning"
+    :loading="isEnrolling || isDropping"
+    @confirm="handleConfirm"
+    @cancel="showDialog = false"
+  />
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import ConfirmDialog from './ConfirmDialog.vue'
+import { checkTimeConflict } from '../utils/conflictChecker'
 
 export default {
   name: 'CourseCard',
+  components: { ConfirmDialog },
   props: {
     course: { type: Object, required: true },
     studentId: { type: [String, Number], default: null },
     isEnrolled: { type: Boolean, default: false },
     isEnrolling: { type: Boolean, default: false },
     isDropping: { type: Boolean, default: false },
-    message: { type: Object, default: null }
+    message: { type: Object, default: null },
+    enrolledCourses: { type: Array, default: () => [] }
   },
   emits: ['enroll', 'drop'],
-  setup(props) {
+  setup(props, { emit }) {
     // 逻辑保持完全一致
     const isFull = computed(() => (props.course.enrolledCount || 0) >= props.course.capacity)
     const capacityPercent = computed(() => {
@@ -89,20 +107,67 @@ export default {
       if (capacityPercent.value >= 80) return '#faad14'
       return '#52c41a' // 绿色
     })
-    const canEnroll = computed(() => props.studentId && !props.isEnrolling && !isFull.value)
+    // 取消“满员不可点”限制：满员/超容量仍可发起选课（在弹窗里提示抽取难度）
+    const canEnroll = computed(() => props.studentId && !props.isEnrolling)
     const canDrop = computed(() => props.studentId && !props.isDropping)
     
-    // 这里简单假设如果正在退课状态或者某种逻辑判断为已选，
-    // 原代码中并没有传入 isEnrolled 属性，而是通过父组件传递 isEnrolling/dropping
-    // 为了适配按钮切换，这里假设外部没有传 isEnrolled，我们只能显示选课按钮，
-    // *除非* 父组件逻辑能判断已选。
-    // *修正*：原代码同时渲染了 Enroll 和 Drop 按钮。
-    // 为了美观，建议：未选显示“选课”，已选显示“退课”。
-    // 但由于原代码 props 里没有 `isSelected`，我们暂时保留**只显示一个**的逻辑不太容易，
-    // 所以还是保留原代码逻辑：**两个按钮并排**，或者根据父组件传入的状态。
-    // 鉴于原代码是两个按钮并排显示，我们美化一下让它们看起来协调。
+    // 弹窗状态
+    const showDialog = ref(false)
+    const dialogType = ref('enroll') // 'enroll' | 'drop'
+    const conflictList = ref([])
+
+    const capacityWarning = computed(() => {
+      if (dialogType.value !== 'enroll') return ''
+      const enrolled = Number(props.course.enrolledCount || 0)
+      const cap = Number(props.course.capacity || 0)
+      if (cap > 0 && enrolled >= cap) {
+        return '该课程选课人数已超过容量，抽签难度较大，请谨慎选择'
+      }
+      return ''
+    })
+
+    const dialogTitle = computed(() => dialogType.value === 'enroll' ? '确认选课' : '确认退课')
+    const dialogMessage = computed(() => {
+      if (dialogType.value === 'enroll') {
+        if (conflictList.value.length > 0) {
+          return `该课程与${conflictList.value[0].courseName}存在冲突。仍要继续选课吗？`
+        }
+        return `确定要选择课程“${props.course.courseName}”吗？`
+      } else {
+        return `确定要退选课程“${props.course.courseName}”吗？退课后可能无法重新选择。`
+      }
+    })
+    // 确认按钮仅保留“选课/退课”两字
+    const dialogConfirmText = computed(() => dialogType.value === 'enroll' ? '选课' : '退课')
+
+    const handleEnrollClick = () => {
+      dialogType.value = 'enroll'
+      // 检查冲突
+      conflictList.value = checkTimeConflict(props.course, props.enrolledCourses)
+      showDialog.value = true
+    }
+
+    const handleDropClick = () => {
+      dialogType.value = 'drop'
+      conflictList.value = [] // 退课不需要检查冲突
+      showDialog.value = true
+    }
+
+    const handleConfirm = () => {
+      showDialog.value = false
+      if (dialogType.value === 'enroll') {
+        emit('enroll', props.course)
+      } else {
+        emit('drop', props.course)
+      }
+    }
     
-    return { isFull, capacityPercent, capacityColor, canEnroll, canDrop }
+    return { 
+      isFull, capacityPercent, capacityColor, canEnroll, canDrop,
+      showDialog, dialogType, conflictList, dialogTitle, dialogMessage, dialogConfirmText,
+      capacityWarning,
+      handleEnrollClick, handleDropClick, handleConfirm
+    }
   }
 }
 </script>

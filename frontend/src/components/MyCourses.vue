@@ -147,6 +147,7 @@
                 :is-enrolled="true"
                 :is-dropping="droppingCourses.has(selectedCourse.courseId)"
                 :message="operationMessage[selectedCourse.courseId]"
+                :enrolled-courses="courses"
                 @drop="handleDrop"
               />
             </div>
@@ -173,26 +174,29 @@
             该时间段没有可选课程
           </div>
           <div v-else class="results-table">
-            <div class="list-header">
-              <div class="col col-info">课程信息</div>
-              <div class="col col-instructor">教师</div>
-              <div class="col col-schedule">时间 / 地点</div>
-              <div class="col col-capacity">课余量</div>
-              <div class="col col-actions">操作</div>
-            </div>
-            <div class="course-list-body">
-              <CourseCard 
-                v-for="course in availableCourses" 
-                :key="course.courseId" 
-                :course="course"
-                :student-id="studentId"
-                :is-enrolled="courses.some(c => c.courseId === course.courseId)"
-                :is-enrolling="enrollingCourses.has(course.courseId)"
-                :is-dropping="droppingCourses.has(course.courseId)"
-                :message="operationMessage[course.courseId]"
-                @enroll="handleEnrollFromDialog"
-                @drop="handleDrop"
-              />
+            <div class="table-container">
+              <div class="list-header sticky-header">
+                <div class="col col-info">课程信息</div>
+                <div class="col col-instructor">教师</div>
+                <div class="col col-schedule">时间 / 地点</div>
+                <div class="col col-capacity">课余量</div>
+                <div class="col col-actions">操作</div>
+              </div>
+              <div class="course-list-body scrollable-body">
+                <CourseCard 
+                  v-for="course in availableCourses" 
+                  :key="course.courseId" 
+                  :course="course"
+                  :student-id="studentId"
+                  :is-enrolled="courses.some(c => c.courseId === course.courseId)"
+                  :is-enrolling="enrollingCourses.has(course.courseId)"
+                  :is-dropping="droppingCourses.has(course.courseId)"
+                  :message="operationMessage[course.courseId]"
+                  :enrolled-courses="courses"
+                  @enroll="handleEnrollFromDialog"
+                  @drop="handleDrop"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -203,6 +207,7 @@
 
 <script>
 import { ref, computed, inject, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { dropCourse, searchCoursesBySession, enrollCourse } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 
@@ -645,6 +650,7 @@ export default {
 
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
+          ElMessage.success(response.message || '选课成功')
           if (response.warn) {
             // 如果有警告信息，也显示出来
             setTimeout(() => {
@@ -706,6 +712,7 @@ export default {
 
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
+          ElMessage.success(response.message || '退课成功')
           // 更新课程的已选人数
           course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
           // 退课成功后，如果它在 selectedCourse 中，也触发一下提示或关闭
@@ -1561,18 +1568,42 @@ export default {
 .course-detail-dialog {
   max-width: 780px !important;
   width: 85% !important;
-  max-height: 60vh !important;
+  max-height: 70vh   !important;
 }
 
 
 .available-courses-dialog {
   max-width: 780px !important;
   width: 85% !important;
-  max-height: 65vh !important;
+  max-height: 70vh + 48px !important;
+  overflow: hidden; /* 防止整个对话框出现滚动条 */
 }
 
 .results-table {
   width: 100%;
+}
+
+.table-container {
+  position: relative;
+  max-height: 70vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #FAF4FC;
+  border-bottom: 1px solid #efe5f5;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.scrollable-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(70vh - 48px); /* 减去表头高度 */
 }
 
 .no-results {

@@ -57,6 +57,7 @@
                       :isEnrolling="enrollingCourses.has(course.courseId)"
                       :isDropping="droppingCourses.has(course.courseId)"
                       :message="operationMessage[course.courseId]"
+                      :enrolledCourses="enrolledCourses"
                       @enroll="handleEnroll"
                       @drop="handleDrop"
                     />
@@ -132,7 +133,7 @@ import { ref, inject, nextTick, onUnmounted, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { User, Position, ArrowRight, CopyDocument, Document, VideoPause, Plus } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { getCourseRecommendationStream, getCoursesByIds, enrollCourse, dropCourse } from '../api/courseApi'
+import { getCourseRecommendationStream, getCoursesByIds, enrollCourse, dropCourse, getStudentCourses } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 
 const studentId = inject('studentId')
@@ -143,6 +144,17 @@ const scrollbarRef = ref(null)
 const enrollingCourses = ref(new Set())
 const droppingCourses = ref(new Set())
 const operationMessage = ref({})
+const enrolledCourses = ref([]) // 存储已选课程列表，用于冲突检测
+
+const fetchEnrolledCourses = async () => {
+  if (!studentId.value) return
+  try {
+    const courses = await getStudentCourses(studentId.value)
+    enrolledCourses.value = courses || []
+  } catch (e) {
+    console.error('Failed to fetch enrolled courses', e)
+  }
+}
 
 const setOperationMessage = (courseId, type, message) => {
   operationMessage.value[courseId] = { type, message }
@@ -164,9 +176,11 @@ const handleEnroll = async (course) => {
     const response = await enrollCourse({ studentId: studentId.value, courseId: course.courseId, batchId: Number(batchId) })
     if (response.success) {
       setOperationMessage(course.courseId, 'success', response.message)
+      ElMessage.success(response.message || '选课成功')
       if (response.warn) setTimeout(() => setOperationMessage(course.courseId, 'warning', response.warn), 2000)
       course.enrolledCount = (course.enrolledCount || 0) + 1
       course.isEnrolled = true
+      fetchEnrolledCourses() // 刷新已选课程列表
     } else {
       setOperationMessage(course.courseId, 'error', response.message)
     }
@@ -183,14 +197,18 @@ const handleDrop = async (course) => {
     const response = await dropCourse({ studentId: studentId.value, courseId: course.courseId })
     if (response.success) {
       setOperationMessage(course.courseId, 'success', response.message)
+      ElMessage.success(response.message || '退课成功')
       course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
       course.isEnrolled = false
+      fetchEnrolledCourses() // 刷新已选课程列表
     } else {
       setOperationMessage(course.courseId, 'error', response.message)
     }
   } catch (err) {
     setOperationMessage(course.courseId, 'error', err.message || '退课失败')
-  } finally { droppingCourses.value.delete(course.courseId) }
+  } finally {
+    droppingCourses.value.delete(course.courseId)
+  }
 }
 
 let cancelStream = null
@@ -468,12 +486,14 @@ onUnmounted(() => {
 
 onMounted(() => {
   loadHistory()
+  fetchEnrolledCourses()
 })
 
 watch(
   () => studentId?.value,
   () => {
     loadHistory()
+    fetchEnrolledCourses()
   }
 )
 

@@ -78,18 +78,21 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                     .build();
         }
 
-        // 4. 课程容量限制（硬性条件）
+        // 4. 课程容量限制（预选：允许超容量，返回提醒）
         Integer enrolledCount = course.getEnrolledCount() != null ? course.getEnrolledCount() : 0;
         Integer capacity = course.getCapacity();
-        if (enrolledCount >= capacity) {
-            return EnrollmentResponse.builder()
-                    .success(false)
-                    .message(String.format("课程已满，当前选课人数：%d/%d", enrolledCount, capacity))
-                    .build();
+        String warnMessage = null;
+        if (capacity != null && capacity > 0 && enrolledCount >= capacity) {
+            warnMessage = String.format("该课程选课人数已超过容量，抽签难度较大，请谨慎选择（当前：%d/%d）", enrolledCount, capacity);
         }
 
         // 5. 时间冲突检查（返回警告，不阻止选课）
-        String warnMessage = checkTimeConflict(studentId, courseId, course.getCourseName());
+        String timeConflictWarn = checkTimeConflict(studentId, courseId, course.getCourseName());
+        if (warnMessage == null || warnMessage.trim().isEmpty()) {
+            warnMessage = timeConflictWarn;
+        } else if (timeConflictWarn != null && !timeConflictWarn.trim().isEmpty()) {
+            warnMessage = warnMessage + "；" + timeConflictWarn;
+        }
 
         // 6. 创建选课记录
         Enrollment enrollment = new Enrollment();
@@ -155,11 +158,19 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                         // 需要获取冲突的课程名称
                         Course conflictCourse = courseMapper.selectById(enrolledSession.getCourseId());
                         String conflictCourseName = conflictCourse != null ? conflictCourse.getCourseName() : "未知课程";
-                        return String.format("选课时间冲突：与课程[%s]在[%s]第%d-%d节冲突",
+                        String newCourseIdStr = courseId == null ? "" : String.format("%08d", courseId);
+                        String conflictCourseIdStr = enrolledSession.getCourseId() == null ? "" : String.format("%08d", enrolledSession.getCourseId());
+                        String safeNewCourseName = (courseName == null || courseName.trim().isEmpty()) ? "未知课程" : courseName;
+                        return String.format(
+                                "选课时间冲突：新选课程《%s》(课程号:%s) 与已选课程《%s》(课程号:%s) 在[%s]第%d-%d节冲突",
+                                safeNewCourseName,
+                                newCourseIdStr,
                                 conflictCourseName,
+                                conflictCourseIdStr,
                                 enrolledSession.getWeekday(),
                                 enrolledSession.getStartPeriod(),
-                                enrolledSession.getEndPeriod());
+                                enrolledSession.getEndPeriod()
+                        );
                     }
                 }
             }

@@ -86,7 +86,7 @@
                       <button 
                         class="btn-drop-mini"
                         :disabled="droppingCourses.has(course.courseId)"
-                        @click="handleDrop(course)"
+                        @click="onDropClick(course)"
                       >
                         {{ droppingCourses.has(course.courseId) ? '...' : '退课' }}
                       </button>
@@ -187,7 +187,7 @@
                                 <button 
                                   class="btn-enroll-mini"
                                   :disabled="enrollingCourses.has(course.courseId)"
-                                  @click="handleEnroll(course)"
+                                  @click="onEnrollClick(course)"
                                 >
                                   {{ enrollingCourses.has(course.courseId) ? '...' : '选课' }}
                                 </button>
@@ -213,14 +213,32 @@
       </div>
     </transition>
   </teleport>
+
+  <ConfirmDialog
+    :visible="showDialog"
+    :title="dialogTitle"
+    :message="dialogMessage"
+    :confirm-text="dialogConfirmText"
+    :type="dialogType"
+    :course="currentCourse"
+    :conflicts="conflictList"
+    :capacity-warning="capacityWarning"
+    :loading="enrollingCourses.has(currentCourse?.courseId) || droppingCourses.has(currentCourse?.courseId)"
+    @confirm="handleConfirm"
+    @cancel="showDialog = false"
+  />
 </template>
 
 <script>
 import { computed, ref, watch, inject, reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getRecommendations as fetchRecommendationsApi, enrollCourse, getStudentCourses, dropCourse } from '../api/courseApi'
+import ConfirmDialog from './ConfirmDialog.vue'
+import { checkTimeConflict } from '../utils/conflictChecker'
 
 export default {
   name: 'CourseProgressDrawer',
+  components: { ConfirmDialog },
   props: {
     visible: { type: Boolean, default: false },
     initialTab: { type: String, default: 'plan' } // 'selected' | 'plan'
@@ -389,6 +407,65 @@ export default {
       }, 5000)
     }
 
+    // 弹窗状态
+    const showDialog = ref(false)
+    const dialogType = ref('enroll')
+    const currentCourse = ref(null)
+    const conflictList = ref([])
+
+    const dialogTitle = computed(() => dialogType.value === 'enroll' ? '确认选课' : '确认退课')
+    const dialogMessage = computed(() => {
+      if (!currentCourse.value) return ''
+      if (dialogType.value === 'enroll') {
+        if (conflictList.value.length > 0) {
+          return `该课程与${conflictList.value[0].courseName}存在冲突。仍要继续选课吗？`
+        }
+        return `确定要选择课程“${currentCourse.value.courseName}”吗？`
+      } else {
+        return `确定要退选课程“${currentCourse.value.courseName}”吗？退课后可能无法重新选择。`
+      }
+    })
+    const dialogConfirmText = computed(() => dialogType.value === 'enroll' ? '选课' : '退课')
+
+    const capacityWarning = computed(() => {
+      if (dialogType.value !== 'enroll') return ''
+      const enrolled = Number(currentCourse.value?.enrolledCount || 0)
+      const cap = Number(currentCourse.value?.capacity || 0)
+      if (cap > 0 && enrolled >= cap) {
+        return '该课程选课人数已超过容量，抽签难度较大，请谨慎选择'
+      }
+      return ''
+    })
+
+    // 选课点击
+    const onEnrollClick = (course) => {
+      currentCourse.value = course
+      dialogType.value = 'enroll'
+      // 检查冲突
+      conflictList.value = checkTimeConflict(course, selectedCourses.value)
+      showDialog.value = true
+    }
+
+    // 退课点击
+    const onDropClick = (course) => {
+      currentCourse.value = course
+      dialogType.value = 'drop'
+      conflictList.value = []
+      showDialog.value = true
+    }
+
+    // 确认操作
+    const handleConfirm = async () => {
+      if (!currentCourse.value) return
+      
+      if (dialogType.value === 'enroll') {
+        await handleEnroll(currentCourse.value)
+      } else {
+        await handleDrop(currentCourse.value)
+      }
+      showDialog.value = false
+    }
+
     // 选课逻辑
     const handleEnroll = async (course) => {
       if (!studentId.value) {
@@ -415,6 +492,7 @@ export default {
 
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
+          ElMessage.success(response.message || '选课成功')
           // 更新本地状态
           course.enrolledCount = (course.enrolledCount || 0) + 1
           emit('course-enrolled') // 通知父组件刷新
@@ -443,6 +521,7 @@ export default {
 
         if (response.success) {
           setOperationMessage(course.courseId, 'success', '退课成功')
+          ElMessage.success('退课成功')
           emit('course-dropped') // 通知父组件刷新
           fetchData() // 同步刷新
         } else {
@@ -507,6 +586,17 @@ export default {
       expandedCategories,
       toggleExpand,
       getCategoryRecommendations,
+      showDialog,
+      dialogType,
+      currentCourse,
+      conflictList,
+      dialogTitle,
+      dialogMessage,
+      dialogConfirmText,
+      capacityWarning,
+      onEnrollClick,
+      onDropClick,
+      handleConfirm,
       handleEnroll,
       handleDrop,
       enrollingCourses,

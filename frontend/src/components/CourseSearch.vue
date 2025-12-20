@@ -30,6 +30,7 @@
               :is-enrolling="enrollingCourses.has(course.courseId)"
               :is-dropping="droppingCourses.has(course.courseId)"
               :message="operationMessage[course.courseId]"
+              :enrolled-courses="enrolledCourses"
               @enroll="handleEnroll"
               @drop="handleDrop"
             />
@@ -47,7 +48,8 @@
 <script>
 // 保持原有的逻辑完全不变
 import { ref, inject, computed, onMounted, watch } from 'vue'
-import { searchCombinedCourses, enrollCourse, dropCourse } from '../api/courseApi'
+import { ElMessage } from 'element-plus'
+import { searchCombinedCourses, enrollCourse, dropCourse, getStudentCourses } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import SearchForm from './SearchForm.vue'
 
@@ -89,6 +91,20 @@ export default {
     const enrollingCourses = ref(new Set())
     const droppingCourses = ref(new Set())
     const operationMessage = ref({})
+    const enrolledCourses = ref([])
+
+    const fetchEnrolledCourses = async () => {
+      if (!normalizedStudentId.value) {
+        enrolledCourses.value = []
+        return
+      }
+      try {
+        const list = await getStudentCourses(normalizedStudentId.value)
+        enrolledCourses.value = Array.isArray(list) ? list : []
+      } catch {
+        enrolledCourses.value = []
+      }
+    }
 
     // ... HandleSearch, HandleReset, HandleEnroll, HandleDrop 逻辑与你提供的源码完全一致 ...
     // 为了节省篇幅，这里省略重复的 script 内容，请直接复制你原来文件中的 methods 代码即可
@@ -97,6 +113,7 @@ export default {
     const handleSearch = async (query) => {
       // 再兜底刷新一次：避免页面刚打开时 storage 写入有延迟
       resolveStudentId()
+      fetchEnrolledCourses()
       loading.value = true
       error.value = ''
       searched.value = true
@@ -178,9 +195,11 @@ export default {
         const response = await enrollCourse({ studentId: normalizedStudentId.value, courseId: course.courseId, batchId: Number(batchId) })
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
+          ElMessage.success(response.message || '选课成功')
           if (response.warn) setTimeout(() => setOperationMessage(course.courseId, 'warning', response.warn), 2000)
           course.enrolledCount = (course.enrolledCount || 0) + 1
           course.isEnrolled = true
+          fetchEnrolledCourses()
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -197,8 +216,10 @@ export default {
         const response = await dropCourse({ studentId: normalizedStudentId.value, courseId: course.courseId })
         if (response.success) {
           setOperationMessage(course.courseId, 'success', response.message)
+          ElMessage.success(response.message || '退课成功')
           course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
           course.isEnrolled = false
+          fetchEnrolledCourses()
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -216,6 +237,7 @@ export default {
 
     onMounted(() => {
       resolveStudentId()
+      fetchEnrolledCourses()
       // 避免与 SearchForm 的 onMounted 自动搜索重复
       if (!searched.value) {
         handleSearch({})
@@ -241,6 +263,7 @@ export default {
     return {
       studentId, results, loading, error, searched,
       enrollingCourses, droppingCourses, operationMessage,
+      enrolledCourses,
       handleSearch, handleReset, handleEnroll, handleDrop
     }
   }
