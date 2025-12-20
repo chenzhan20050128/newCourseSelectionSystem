@@ -51,7 +51,7 @@ export default {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 2px solid hsl(294, 40%, 91%); 
   padding-bottom: 0;
   margin-bottom: 0px;
   position: relative;
@@ -70,7 +70,8 @@ export default {
   background: transparent;
   cursor: pointer;
   font-size: 15px;
-  color: #666;
+  /* [修改] 默认文字颜色为浅灰色 */
+  color: #666; 
   border-bottom: 3px solid transparent;
   transition: all 0.3s;
   position: relative;
@@ -78,12 +79,14 @@ export default {
 }
 
 .tab:hover {
-  color: #667eea;
+  /* [修改] hover 时颜色变为深紫色 */
+  color: #7C1F89; 
 }
 
 .tab.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
+  /* [修改] active 状态颜色为深紫色 */
+  color: #7C1F89; 
+  border-bottom-color: #7C1F89; /* 激活下划线颜色也改为紫色 */
   font-weight: 600;
 }
 
