@@ -115,12 +115,6 @@
       />
     </div>
 
-    <!-- [调整] 全局悬浮入口：改为两个按钮 -->
-    <div class="floating-progress-widget">
-      <button class="widget-action" @click="openProgressDrawer('selected')">查看已选课程</button>
-      <button class="widget-action" @click="openProgressDrawer('plan')">培养方案建议</button>
-    </div>
-
     <!-- 抽屉组件 -->
     <CourseProgressDrawer 
       :visible="showProgressDrawer" 
