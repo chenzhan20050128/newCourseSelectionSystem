@@ -1,7 +1,7 @@
 <template>
   <form @submit.prevent="handleSearch" class="search-card">
     
-    <!-- 第一行：核心搜索区 (加大尺寸) -->
+    <!-- 第一行：核心搜索区 -->
     <div class="primary-search-area">
       <div class="input-wrapper main-input">
         <input 
@@ -16,9 +16,8 @@
       </button>
     </div>
 
-    <!-- 第二行：辅助筛选区 (宽度标准化) -->
+    <!-- 第二行：辅助筛选区 -->
     <div class="filter-bar">
-      <!-- 教师 -->
       <div class="filter-cell">
         <AutocompleteInput
           v-model="query.instructorName"
@@ -28,7 +27,6 @@
         />
       </div>
 
-      <!-- 学院 -->
       <div class="filter-cell">
         <AutocompleteInput
           v-model="query.college"
@@ -38,7 +36,6 @@
         />
       </div>
 
-      <!-- 校区 -->
       <div class="filter-cell">
         <AutocompleteInput
           v-model="query.campus"
@@ -48,7 +45,6 @@
         />
       </div>
 
-      <!-- 学分 (稍微窄一点，但保持固定宽度) -->
       <div class="filter-cell short">
         <AutocompleteInput
           v-model="query.credits"
@@ -58,35 +54,61 @@
         />
       </div>
 
-      <!-- 时间 (胶囊样式，高度与输入框对齐) -->
       <div class="time-group">
         <select v-model="query.weekday" class="std-select no-border">
           <option value="">礼拜</option>
           <option v-for="d in ['周一','周二','周三','周四','周五','周六','周日']" :key="d" :value="d">{{d}}</option>
         </select>
         <span class="divider">|</span>
-        
-        <!-- 这里的 input 我加了 placeholder 即使不显示也为了语义 -->
         <input v-model.number="query.startPeriod" type="number" min="1" max="12" class="std-input tiny-input no-border" />
-        
-        <!-- [修改点]：去掉了空格，改用了 En Dash -->
         <span class="sep">-</span>
-        
         <input v-model.number="query.endPeriod" type="number" min="1" max="12" class="std-input tiny-input no-border" />
         <span class="unit">节</span>
       </div>
 
-      <!-- 重置按钮 -->
       <button type="button" @click="handleReset" class="btn-reset-text">
         重置筛选
       </button>
+    </div>
+
+    <!-- [新增] 第三部分：课程类型筛选 -->
+    <div class="category-filter-section">
+      
+      <!-- 一级标签 -->
+      <div class="level-1-tabs">
+        <div 
+          v-for="group in level1Options" 
+          :key="group"
+          class="tab-l1-item"
+          :class="{ active: activeLevel1 === group }"
+          @click="handleLevel1Change(group)"
+        >
+          {{ group }}
+        </div>
+      </div>
+
+      <!-- 二级标签 (仅当一级不为'全部'时显示) -->
+      <transition name="fade">
+        <div class="level-2-tabs" v-if="activeLevel1 !== '全部'">
+          <div 
+            v-for="subType in categoryGroups[activeLevel1]" 
+            :key="subType"
+            class="tab-l2-pill"
+            :class="{ active: query.type === subType }"
+            @click="handleLevel2Change(subType)"
+          >
+            {{ subType }}
+          </div>
+        </div>
+      </transition>
+      
     </div>
 
   </form>
 </template>
 
 <script>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import AutocompleteInput from './AutocompleteInput.vue'
 import { getAttributeValues } from '../api/courseApi'
 
@@ -98,22 +120,76 @@ export default {
   },
   emits: ['search', 'reset'],
   setup(props, { emit }) {
-    // 1. 定义一个临时变量 keyword 用于主搜索框
     const keyword = ref('')
+    const activeLevel1 = ref('全部') // 当前激活的一级分类
 
-    // 2. 这里的 query 只保留需要传给后端的字段
+    // 1. 初始化 query，确保 type 字段存在且为空字符串
     const query = reactive({
       courseId: null, 
       courseName: '', 
+      type: '',      // 关键：用于存储二级标签内容 (如 '大学数学')
       credits: null, 
       college: '', 
       instructorName: '', 
       campus: '', 
-      // 移除了 classroom, startWeek, endWeek
       weekday: '', 
       startPeriod: null, 
       endPeriod: null
     })
+
+    // 2. 映射表数据
+    const CATEGORY_MAP = {
+      '大学数学': '必修课程', '大学英语': '必修课程', '思政': '必修课程',
+      '体育': '必修课程', '军事课': '必修课程', '军理课': '必修课程',
+      '学科基础课程': '专业课程', '专业选修': '专业课程', '毕业论文': '专业课程',
+      '通识课': '通识教育','科光': '通识教育', '悦读': '通识教育', '阅读': '通识教育',
+      '美育': '通识教育', 
+    }
+
+    const level1Options = ['全部', '必修课程', '专业课程', '通识教育']
+
+    // 3. 计算属性：将映射表反转为 { '必修课程': ['大学数学', ...], ... }
+    const categoryGroups = computed(() => {
+      const groups = {
+        '必修课程': [],
+        '专业课程': [],
+        '通识教育': []
+      }
+      Object.keys(CATEGORY_MAP).forEach(subType => {
+        const parentType = CATEGORY_MAP[subType]
+        if (groups[parentType]) {
+          // 避免重复添加
+          if (!groups[parentType].includes(subType)) {
+            groups[parentType].push(subType)
+          }
+        }
+      })
+      return groups
+    })
+
+    // 4. 处理一级标签点击：默认选中该分类下的第一个二级标签
+    const handleLevel1Change = (group) => {
+      activeLevel1.value = group
+      
+      if (group === '全部') {
+        query.type = ''
+      } else {
+        const subList = categoryGroups.value[group]
+        // 如果该分类下有子标签，默认选中第一个
+        if (subList && subList.length > 0) {
+          query.type = subList[0]
+        } else {
+          query.type = ''
+        }
+      }
+      handleSearch() // 立即查询
+    }
+
+    // 5. 处理二级标签点击
+    const handleLevel2Change = (subType) => {
+      query.type = subType
+      handleSearch() // 立即查询
+    }
 
     const buildCondition = (excludeField = null) => {
       const condition = {}
@@ -143,32 +219,33 @@ export default {
     }
 
     const handleSearch = () => {
-      // --- 核心逻辑：智能解析 keyword ---
-      // 重置真正的查询字段
       query.courseId = null
       query.courseName = ''
 
       if (keyword.value) {
         const trimmed = keyword.value.trim()
-        // 如果是纯数字，认为是课程号
         if (/^\d+$/.test(trimmed)) {
           query.courseId = trimmed
         } else {
-          // 否则认为是课程名
           query.courseName = trimmed
         }
       }
 
-      // 发射查询事件
+      // 确保 type 被包含在发送的对象中
       emit('search', { ...query })
     }
 
     const handleReset = () => {
-      // 清空 keyword
       keyword.value = ''
       
-      // 清空 query
+      // 重置分类状态
+      activeLevel1.value = '全部'
+      query.type = ''
+
       Object.keys(query).forEach(key => {
+        // type 已经在上面重置了，这里跳过
+        if (key === 'type') return
+
         if (['courseId', 'credits', 'startPeriod', 'endPeriod'].includes(key)) {
           query[key] = null
           return
@@ -187,14 +264,20 @@ export default {
       query, 
       createFetch, 
       handleSearch, 
-      handleReset 
+      handleReset,
+      // 导出给模板使用
+      activeLevel1,
+      level1Options,
+      categoryGroups,
+      handleLevel1Change,
+      handleLevel2Change
     }
   }
 }
 </script>
 
 <style scoped>
-/* ... 前面的布局样式保持不变 ... */
+/* 原有基础样式 */
 .search-card {
   background: white;
   padding: 24px 30px;
@@ -221,9 +304,7 @@ export default {
 .filter-cell.short { width: 100px; }
 .full-width { width: 100%; }
 
-/* --- [重点修改] 统一控件样式 --- */
-
-/* 1. 只给“容器”和“原生输入框”加边框，不给内部 input 加 */
+/* 输入框统一样式 */
 .std-input, 
 .std-select,
 :deep(.autocomplete-container) {
@@ -239,7 +320,6 @@ export default {
   width: 100%;
 }
 
-/* 2. 彻底清除组件内部 input 的所有样式 */
 :deep(.autocomplete-input) { 
   border: none !important; 
   outline: none !important;
@@ -248,12 +328,10 @@ export default {
   background: transparent !important; 
   padding: 0 !important; 
   margin: 0 !important;
-  box-shadow: none !important; /* 关键：去掉阴影 */
+  box-shadow: none !important; 
   border-radius: 0 !important;
 }
 
-/* 3. 聚焦高亮逻辑优化 */
-/* 当普通输入框聚焦，或者 容器内部(focus-within) 有焦点时，高亮外层 */
 .std-input:focus, 
 .std-select:focus,
 :deep(.autocomplete-container):focus-within {
@@ -263,7 +341,6 @@ export default {
   background: #fff;
 }
 
-/* --- 下面的样式保持不变 --- */
 .time-group { background: #f7f8fa; border-radius: 8px; padding: 0 10px; height: 36px; display: flex; align-items: center; gap: 4px; border: 1px solid #e0e0e0; }
 .no-border { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0 4px; }
 .tiny-input { width: 36px !important; text-align: center; color: #333; display: flex; align-items: center; justify-content: center; }
@@ -272,6 +349,62 @@ export default {
 .unit { font-size: 13px; color: #888; margin-left: 2px; }
 .btn-reset-text { background: none; border: none; color: #909399; font-size: 14px; cursor: pointer; margin-left: auto; padding: 6px 12px; border-radius: 6px; transition: all 0.2s; }
 .btn-reset-text:hover { color: #7C1F89; background: #f9f0ff; }
+
+/* 课程分类筛选样式 */
+.category-filter-section {
+  border-top: 1px dashed #eee;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.level-1-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+
+.tab-l1-item {
+  font-size: 15px;
+  font-weight: 500;
+  color: #606266;
+  cursor: pointer;
+  padding: 4px 0;
+  position: relative;
+  transition: all 0.2s;
+}
+.tab-l1-item:hover { color: #7C1F89; }
+.tab-l1-item.active { color: #7C1F89; font-weight: 700; }
+.tab-l1-item.active::after {
+  content: ''; position: absolute; bottom: -9px; left: 0; width: 100%; height: 3px; background: #7C1F89; border-radius: 2px 2px 0 0;
+}
+
+.level-2-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.tab-l2-pill {
+  font-size: 13px;
+  color: #666;
+  background: #f4f4f5;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+.tab-l2-pill:hover { color: #7C1F89; background: #f8f0fc; }
+.tab-l2-pill.active { background: #7C1F89; color: white; box-shadow: 0 2px 6px rgba(124, 31, 137, 0.2); }
+
+/* 动画 */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
 @media (max-width: 1000px) { .filter-cell, .filter-cell.short { width: auto; flex: 1 1 120px; } }
 @media (max-width: 768px) { .primary-search-area { flex-direction: column; } .btn-search-hero { width: 100%; } .filter-bar { gap: 10px; } .filter-cell { flex: 1 1 45%; max-width: 48%; } .time-group { flex: 1 1 100%; max-width: 100%; order: 10; } .btn-reset-text { width: 100%; text-align: center; order: 11; margin-top: 8px;} }
 </style>

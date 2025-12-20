@@ -125,7 +125,7 @@ export default {
         combinedRequest.studentId = normalizedStudentId.value
 
         const courseCondition = {}
-        const normalKeys = ['courseId', 'courseName', 'credits', 'description', 'college', 'campus', 'classroom', 'startWeek', 'endWeek']
+        const normalKeys = ['courseId', 'courseName', 'credits', 'description', 'college', 'campus', 'classroom', 'startWeek', 'endWeek', 'type']
         let hasCourseCondition = false
         normalKeys.forEach(key => {
           if (query[key] !== null && query[key] !== '' && query[key] !== undefined) {
