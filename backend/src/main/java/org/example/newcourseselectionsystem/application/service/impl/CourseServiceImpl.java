@@ -120,6 +120,13 @@ public class CourseServiceImpl implements CourseService {
                     }
                     return dto;
                 })
+                // 新增排序逻辑：已选课程(true)排在前面，未选(false/null)排在后面
+                .sorted((o1, o2) -> {
+                    boolean b1 = Boolean.TRUE.equals(o1.getIsEnrolled());
+                    boolean b2 = Boolean.TRUE.equals(o2.getIsEnrolled());
+                    // Boolean.compare(b2, b1) 实现降序排列 (true > false)
+                    return Boolean.compare(b2, b1);
+                })
                 .collect(Collectors.toList());
     }
 
