@@ -1,28 +1,53 @@
 <template>
   <div class="page-container">
     <div class="content-wrapper">
-      <SearchForm @search="handleSearch" @reset="handleReset" :loading="loading" />
+      <SearchForm 
+        @search="handleSearch" 
+        @reset="handleReset" 
+        :loading="loading" 
+        :result-count="results.length > 0 ? results.length : null"
+      />
       
       <div class="results-card">
-        <div class="card-header">
-          <h3>查询结果</h3>
-          <span v-if="results.length > 0" class="badge">{{ results.length }} 门课程</span>
-        </div>
 
         <div v-if="error" class="error-banner">{{ error }}</div>
 
         <div v-if="results.length > 0" class="results-table">
           <div class="list-header">
-            <div class="col col-info">课程信息</div>
-            <div class="col col-instructor">教师</div>
-            <div class="col col-schedule">时间 / 地点</div>
-            <div class="col col-capacity">课余量</div>
+            <div class="col col-info sortable" @click="toggleSort('courseId')">
+              课程号
+              <span class="sort-arrows" :class="{ active: sortKey === 'courseId' }">
+                <span class="arrow up" :class="arrowClass('courseId', 'asc')">▲</span>
+                <span class="arrow down" :class="arrowClass('courseId', 'desc')">▼</span>
+              </span>
+            </div>
+            <div class="col col-instructor sortable" @click="toggleSort('instructorName')">
+              教师
+              <span class="sort-arrows" :class="{ active: sortKey === 'instructorName' }">
+                <span class="arrow up" :class="arrowClass('instructorName', 'asc')">▲</span>
+                <span class="arrow down" :class="arrowClass('instructorName', 'desc')">▼</span>
+              </span>
+            </div>
+            <div class="col col-schedule sortable" @click="toggleSort('time')">
+              时间 / 地点
+              <span class="sort-arrows" :class="{ active: sortKey === 'time' }">
+                <span class="arrow up" :class="arrowClass('time', 'asc')">▲</span>
+                <span class="arrow down" :class="arrowClass('time', 'desc')">▼</span>
+              </span>
+            </div>
+            <div class="col col-capacity sortable" @click="toggleSort('utilization')">
+              选课人数 / 容量
+              <span class="sort-arrows" :class="{ active: sortKey === 'utilization' }">
+                <span class="arrow up" :class="arrowClass('utilization', 'asc')">▲</span>
+                <span class="arrow down" :class="arrowClass('utilization', 'desc')">▼</span>
+              </span>
+            </div>
             <div class="col col-actions">操作</div>
           </div>
 
           <div class="course-list-body">
             <CourseCard 
-              v-for="course in results" 
+              v-for="course in sortedResults" 
               :key="course.courseId" 
               :course="course"
               :student-id="studentId"
@@ -52,12 +77,14 @@ import { ElMessage } from 'element-plus'
 import { searchCombinedCourses, enrollCourse, dropCourse, getStudentCourses } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import SearchForm from './SearchForm.vue'
+import { sortCourses } from '../utils/courseSorter'
 
 export default {
   name: 'CourseSearch',
   components: { CourseCard, SearchForm },
   setup() {
     const injectedStudentId = inject('studentId')
+    const refreshAfterCourseChange = inject('refreshAfterCourseChange', null)
     const storedStudentId = ref('')
     const resolveStudentId = () => {
       const fromSession = sessionStorage.getItem('studentId')
@@ -92,6 +119,36 @@ export default {
     const droppingCourses = ref(new Set())
     const operationMessage = ref({})
     const enrolledCourses = ref([])
+
+    const sortKey = ref('')
+    const sortOrder = ref('asc')
+
+    const toggleSort = (key) => {
+      // none -> asc -> desc -> none
+      if (sortKey.value !== key) {
+        sortKey.value = key
+        sortOrder.value = 'asc'
+        return
+      }
+      if (sortOrder.value === 'asc') {
+        sortOrder.value = 'desc'
+        return
+      }
+      // desc -> none
+      sortKey.value = ''
+      sortOrder.value = 'asc'
+    }
+
+    const arrowClass = (key, dir) => {
+      if (sortKey.value !== key) return 'inactive'
+      if (sortOrder.value !== dir) return 'inactive'
+      return 'active'
+    }
+
+    const sortedResults = computed(() => {
+      if (!sortKey.value) return results.value
+      return sortCourses(results.value, { key: sortKey.value, order: sortOrder.value })
+    })
 
     const fetchEnrolledCourses = async () => {
       if (!normalizedStudentId.value) {
@@ -200,6 +257,9 @@ export default {
           course.enrolledCount = (course.enrolledCount || 0) + 1
           course.isEnrolled = true
           fetchEnrolledCourses()
+          if (typeof refreshAfterCourseChange === 'function') {
+            refreshAfterCourseChange()
+          }
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -220,6 +280,9 @@ export default {
           course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
           course.isEnrolled = false
           fetchEnrolledCourses()
+          if (typeof refreshAfterCourseChange === 'function') {
+            refreshAfterCourseChange()
+          }
         } else {
           setOperationMessage(course.courseId, 'error', response.message)
         }
@@ -264,7 +327,9 @@ export default {
       studentId, results, loading, error, searched,
       enrollingCourses, droppingCourses, operationMessage,
       enrolledCourses,
-      handleSearch, handleReset, handleEnroll, handleDrop
+      handleSearch, handleReset, handleEnroll, handleDrop,
+      sortKey, sortOrder,
+      sortedResults, toggleSort, arrowClass
     }
   }
 }
@@ -283,8 +348,43 @@ export default {
 
 /* --- 核心修改：平衡列宽 --- */
 .col { 
-  padding: 0 12px; /* 增加列内边距，让文字不靠太近 */
+  padding: 0 12px; 
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-arrows {
+  margin-left: 4px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  vertical-align: middle;
+  cursor: pointer;
+  gap: 2px;
+}
+
+.sort-arrows .arrow {
+  font-size: 14px;
+  height: 12px;
+  line-height: 12px;
+}
+
+.sort-arrows .arrow.inactive {
+  color: #bfbfbf;
+}
+
+.sort-arrows .arrow.active {
+  color: #7C1F89;
+  font-weight: 800;
 }
 
 /* 

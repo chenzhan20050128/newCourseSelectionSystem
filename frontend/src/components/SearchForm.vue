@@ -85,6 +85,11 @@
         >
           {{ group }}
         </div>
+        
+        <!-- 结果统计 -->
+        <div v-if="resultCount !== null" class="result-badge">
+          {{ resultCount }} 门课程
+        </div>
       </div>
 
       <!-- 二级标签 (仅当一级不为'全部'时显示) -->
@@ -116,7 +121,8 @@ export default {
   name: 'SearchForm',
   components: { AutocompleteInput },
   props: {
-    loading: { type: Boolean, default: false }
+    loading: { type: Boolean, default: false },
+    resultCount: { type: Number, default: null }
   },
   emits: ['search', 'reset'],
   setup(props, { emit }) {
@@ -280,9 +286,9 @@ export default {
 /* 原有基础样式 */
 .search-card {
   background: white;
-  padding: 24px 30px;
+  padding: 12px 24px;
   border-radius: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
   box-shadow: 0 8px 24px rgba(124, 31, 137, 0.06);
   display: flex;
   flex-direction: column;
@@ -379,6 +385,17 @@ export default {
 .tab-l1-item.active { color: #7C1F89; font-weight: 700; }
 .tab-l1-item.active::after {
   content: ''; position: absolute; bottom: -9px; left: 0; width: 100%; height: 3px; background: #7C1F89; border-radius: 2px 2px 0 0;
+}
+
+.result-badge {
+  margin-left: auto;
+  font-size: 15px;
+  color: #7C1F89;
+  background: #f3e5f5;
+  padding: 4px 15px;
+  border-radius: 12px;
+  font-weight: 600;
+  align-self: center;
 }
 
 .level-2-tabs {

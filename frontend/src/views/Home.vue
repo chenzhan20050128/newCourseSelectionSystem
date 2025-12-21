@@ -12,12 +12,19 @@
           <div class="batch-summary" @click="toggleBatchDetails">
             <span class="batch-name">{{ selectedBatch.batchName }} - {{ selectedBatch.roundName }}</span>
             <span :class="['batch-status', statusClass]">{{ selectedBatch.status }}</span>
+            <span v-if="currentTime" class="current-time">当前时间: {{ currentTime }}</span>
+            <span v-if="timeRemaining" class="time-remaining-prefix">剩余时间:</span>
+            <span v-if="timeRemaining" :class="['time-remaining', timeRemainingClass]">{{ timeRemaining }}</span>
             <span class="dropdown-icon">{{ showBatchDetails ? '▲' : '▼' }}</span>
           </div>
           <button @click="showBatchSelector = true" class="change-batch-btn-header">切换</button>
           
           <!-- 下拉详细信息 -->
           <div class="batch-details-dropdown" v-show="showBatchDetails">
+            <div class="detail-item">
+              <span class="detail-label">🕒 当前时间:</span>
+              <span class="detail-value">{{ currentTime }}</span>
+            </div>
             <div class="detail-item">
               <span class="detail-label">⏰ 选课时间:</span>
               <span class="detail-value">{{ formatDateTime(selectedBatch.startTime) }} ~ {{ formatDateTime(selectedBatch.endTime) }}</span>
@@ -107,7 +114,7 @@
         :courses="myCoursesCourses"
         :loading="myCoursesLoading"
         :error="myCoursesError"
-        @refresh="loadMyCourses"
+        @refresh="refreshMyCourses"
       />
       <SmartCourseSelection
         v-if="activeTab === 'smartSelection' && user?.userType === 'student'"
@@ -117,6 +124,7 @@
 
     <!-- 抽屉组件 -->
     <CourseProgressDrawer 
+      ref="courseProgressDrawerRef"
       :visible="showProgressDrawer" 
       :initialTab="progressDrawerTab"
       @close="showProgressDrawer = false" 
@@ -158,10 +166,12 @@ export default {
     const showBatchSelector = ref(false);
     const showBatchDetails = ref(false);
     const timeRemaining = ref('');
+    const currentTime = ref('');
     let countdownTimer = null;
     const showProgressDrawer = ref(false);
     const progressDrawerTab = ref('selected');
     const smartSelectionKey = ref(0);
+    const courseProgressDrawerRef = ref(null);
 
     // “我的课程”由 Home 直接请求并下发
     const myCoursesCourses = ref([]);
@@ -224,10 +234,22 @@ export default {
       return getStatusClass(selectedBatch.value.status);
     });
 
+    // 剩余时间颜色样式
+    const timeRemainingClass = computed(() => {
+      if (!selectedBatch.value) return '';
+      return getTimeRemainingClass(selectedBatch.value.status);
+    });
+
     const getStatusClass = (status) => {
       if (status === '进行中') return 'status-active';
       if (status === '未开始') return 'status-pending';
       return 'status-ended';
+    };
+
+    const getTimeRemainingClass = (status) => {
+      if (status === '进行中') return 'time-active';
+      if (status === '未开始') return 'time-pending';
+      return 'time-ended';
     };
     
     // 提供 studentId 给子组件
@@ -295,10 +317,17 @@ export default {
       smartSelectionKey.value++;
     };
 
-    // 外部触发刷新（抽屉选课/退课后）
+    // 外部触发刷新（任意位置选课/退课后）
     const refreshMyCourses = () => {
       loadMyCourses();
+      // 同时也刷新抽屉里的数据
+      if (courseProgressDrawerRef.value) {
+        courseProgressDrawerRef.value.fetchData();
+      }
     };
+
+    // 让子组件（如 CourseSearch / SmartCourseSelection）也能触发同样的刷新
+    provide('refreshAfterCourseChange', refreshMyCourses);
 
     // 加载可用轮次
     const loadAvailableBatches = async () => {
@@ -340,35 +369,45 @@ export default {
       }
 
       const updateCountdown = () => {
+        // 更新当前时间
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const curHours = String(now.getHours()).padStart(2, '0');
+        const curMinutes = String(now.getMinutes()).padStart(2, '0');
+        const curSeconds = String(now.getSeconds()).padStart(2, '0');
+        currentTime.value = `${year}-${month}-${day} ${curHours}:${curMinutes}:${curSeconds}`;
+
         if (!selectedBatch.value) {
           timeRemaining.value = '';
           return;
         }
 
-        const now = new Date().getTime();
+        const nowTime = now.getTime();
         const startTime = new Date(selectedBatch.value.startTime).getTime();
         const endTime = new Date(selectedBatch.value.endTime).getTime();
 
         // 如果还未开始，显示距离开始的时间
-        if (now < startTime) {
-          const diff = startTime - now;
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        if (nowTime < startTime) {
+          const diff = startTime - nowTime;
+          const remainingDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const remainingHours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const remainingMinutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const remainingSeconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-          if (days > 0) {
-            timeRemaining.value = `距离开始: ${days}天 ${hours}小时 ${minutes}分钟`;
-          } else if (hours > 0) {
-            timeRemaining.value = `距离开始: ${hours}小时 ${minutes}分钟 ${seconds}秒`;
+          if (remainingDays > 0) {
+            timeRemaining.value = `距离开始: ${remainingDays}天 ${remainingHours}小时 ${remainingMinutes}分钟 ${remainingSeconds}秒`;
+          } else if (remainingHours > 0) {
+            timeRemaining.value = `距离开始: ${remainingHours}小时 ${remainingMinutes}分钟 ${remainingSeconds}秒`;
           } else {
-            timeRemaining.value = `距离开始: ${minutes}分钟 ${seconds}秒`;
+            timeRemaining.value = `距离开始: ${remainingMinutes}分钟 ${remainingSeconds}秒`;
           }
           return;
         }
 
         // 如果已经开始，显示距离结束的时间
-        const diff = endTime - now;
+        const diff = endTime - nowTime;
 
         if (diff <= 0) {
           timeRemaining.value = '已结束';
@@ -384,7 +423,7 @@ export default {
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
         if (days > 0) {
-          timeRemaining.value = `${days}天 ${hours}小时 ${minutes}分钟`;
+          timeRemaining.value = `${days}天 ${hours}小时 ${minutes}分钟 ${seconds}秒`;
         } else if (hours > 0) {
           timeRemaining.value = `${hours}小时 ${minutes}分钟 ${seconds}秒`;
         } else {
@@ -424,7 +463,9 @@ export default {
       showBatchSelector,
       showBatchDetails,
       timeRemaining,
+      currentTime,
       statusClass,
+      timeRemainingClass,
       getStatusClass,
       selectBatch,
       formatDateTime,
@@ -442,7 +483,8 @@ export default {
       myCoursesCredits,
       myCoursesConflicts,
       newSmartChat,
-      smartSelectionKey
+      smartSelectionKey,
+      courseProgressDrawerRef
     };
   }
 };
@@ -473,7 +515,7 @@ export default {
 .top-sticky {
   position: sticky;
   top: 0;
-  z-index: 1100;
+  z-index: 1600;
   /* 顶部不再需要负边距；只保留左右铺满 */
   margin: 0 -10px 0 -10px;
   background: white;
@@ -484,6 +526,7 @@ export default {
 .tabs-sticky {
   background: white;
   padding: 0 10px;
+  z-index: 1000 !important;
 }
 
 .header {
@@ -497,6 +540,7 @@ export default {
   position: relative;
   flex-wrap: wrap;
   gap: 15px;
+  z-index: 1600;
 }
 
 .header-left {
@@ -696,6 +740,37 @@ export default {
 .status-ended {
   background: #9e9e9e;
   color: white;
+}
+
+.time-remaining {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.time-remaining-prefix {
+  font-size: 16px;
+  font-weight: 600;
+  margin-left: 8px;
+  color: white;
+}
+
+.current-time {
+  font-size: 16px;
+  font-weight: 600;
+  margin-left: 8px;
+  color: white;
+}
+
+.time-active {
+  color: #4caf50; /* 绿色 */
+}
+
+.time-pending {
+  color: #ff9800; /* 橙色 */
+}
+
+.time-ended {
+  color: #9e9e9e; /* 灰色 */
 }
 
 .dropdown-icon {

@@ -49,7 +49,38 @@
                 <!-- Recommended Courses List -->
                 <div v-if="msg.recommendedCourses && msg.recommendedCourses.length > 0" class="recommended-courses-list">
                   <div class="recommendation-title">推荐课程详情：</div>
-                  <div class="course-card-wrapper" v-for="course in msg.recommendedCourses" :key="course.courseId">
+                  <div class="recommendation-table-header">
+                    <div class="col col-info sortable" @click="toggleSort('courseId')">
+                      课程号
+                      <span class="sort-arrows" :class="{ active: sortKey === 'courseId' }">
+                        <span class="arrow up" :class="arrowClass('courseId', 'asc')">▲</span>
+                        <span class="arrow down" :class="arrowClass('courseId', 'desc')">▼</span>
+                      </span>
+                    </div>
+                    <div class="col col-instructor sortable" @click="toggleSort('instructorName')">
+                      教师
+                      <span class="sort-arrows" :class="{ active: sortKey === 'instructorName' }">
+                        <span class="arrow up" :class="arrowClass('instructorName', 'asc')">▲</span>
+                        <span class="arrow down" :class="arrowClass('instructorName', 'desc')">▼</span>
+                      </span>
+                    </div>
+                    <div class="col col-schedule sortable" @click="toggleSort('time')">
+                      时间 / 地点
+                      <span class="sort-arrows" :class="{ active: sortKey === 'time' }">
+                        <span class="arrow up" :class="arrowClass('time', 'asc')">▲</span>
+                        <span class="arrow down" :class="arrowClass('time', 'desc')">▼</span>
+                      </span>
+                    </div>
+                    <div class="col col-capacity sortable" @click="toggleSort('utilization')">
+                      选课人数 / 容量
+                      <span class="sort-arrows" :class="{ active: sortKey === 'utilization' }">
+                        <span class="arrow up" :class="arrowClass('utilization', 'asc')">▲</span>
+                        <span class="arrow down" :class="arrowClass('utilization', 'desc')">▼</span>
+                      </span>
+                    </div>
+                    <div class="col col-actions">操作</div>
+                  </div>
+                  <div class="course-card-wrapper" v-for="course in getSortedRecommendedCourses(msg.recommendedCourses)" :key="course.courseId">
                     <CourseCard 
                       :course="course"
                       :studentId="studentId"
@@ -135,8 +166,10 @@ import { User, Position, ArrowRight, CopyDocument, Document, VideoPause, Plus } 
 import MarkdownIt from 'markdown-it'
 import { getCourseRecommendationStream, getCoursesByIds, enrollCourse, dropCourse, getStudentCourses } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
+import { sortCourses } from '../utils/courseSorter'
 
 const studentId = inject('studentId')
+const refreshAfterCourseChange = inject('refreshAfterCourseChange', null)
 const messages = ref([])
 const inputMessage = ref('')
 const isStreaming = ref(false)
@@ -145,6 +178,36 @@ const enrollingCourses = ref(new Set())
 const droppingCourses = ref(new Set())
 const operationMessage = ref({})
 const enrolledCourses = ref([]) // 存储已选课程列表，用于冲突检测
+
+const sortKey = ref('')
+const sortOrder = ref('asc')
+
+const toggleSort = (key) => {
+  // none -> asc -> desc -> none
+  if (sortKey.value !== key) {
+    sortKey.value = key
+    sortOrder.value = 'asc'
+    return
+  }
+  if (sortOrder.value === 'asc') {
+    sortOrder.value = 'desc'
+    return
+  }
+  // desc -> none
+  sortKey.value = ''
+  sortOrder.value = 'asc'
+}
+
+const arrowClass = (key, dir) => {
+  if (sortKey.value !== key) return 'inactive'
+  if (sortOrder.value !== dir) return 'inactive'
+  return 'active'
+}
+
+const getSortedRecommendedCourses = (courses) => {
+  if (!sortKey.value) return courses || []
+  return sortCourses(courses || [], { key: sortKey.value, order: sortOrder.value })
+}
 
 const fetchEnrolledCourses = async () => {
   if (!studentId.value) return
@@ -181,6 +244,9 @@ const handleEnroll = async (course) => {
       course.enrolledCount = (course.enrolledCount || 0) + 1
       course.isEnrolled = true
       fetchEnrolledCourses() // 刷新已选课程列表
+      if (typeof refreshAfterCourseChange === 'function') {
+        refreshAfterCourseChange()
+      }
     } else {
       setOperationMessage(course.courseId, 'error', response.message)
     }
@@ -201,6 +267,9 @@ const handleDrop = async (course) => {
       course.enrolledCount = Math.max((course.enrolledCount || 0) - 1, 0)
       course.isEnrolled = false
       fetchEnrolledCourses() // 刷新已选课程列表
+      if (typeof refreshAfterCourseChange === 'function') {
+        refreshAfterCourseChange()
+      }
     } else {
       setOperationMessage(course.courseId, 'error', response.message)
     }
@@ -896,6 +965,63 @@ watch(
   flex-direction: column;
   gap: 8px;
   width: 100%;
+}
+
+.recommendation-table-header {
+  display: flex;
+  background: #FAF4FC;
+  padding: 10px 12px;
+  color: #6a5acd;
+  font-weight: 600;
+  font-size: 13px;
+  border: 1px solid #efe5f5;
+  border-radius: 8px;
+}
+
+.recommendation-table-header .col {
+  padding: 0 12px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.recommendation-table-header .col-info      { flex: 2.5; min-width: 200px; }
+.recommendation-table-header .col-instructor{ flex: 1;   min-width: 100px; }
+.recommendation-table-header .col-schedule  { flex: 1.8; min-width: 180px; }
+.recommendation-table-header .col-capacity  { flex: 1.2; min-width: 120px; }
+.recommendation-table-header .col-actions   { flex: 0 0 100px; display: flex; justify-content: center; position: relative; }
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-arrows {
+  margin-left: 4px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  vertical-align: middle;
+  cursor: pointer;
+  gap: 2px;
+}
+
+.sort-arrows .arrow {
+  font-size: 14px;
+  height: 12px;
+  line-height: 12px;
+}
+
+.sort-arrows .arrow.inactive {
+  color: #bfbfbf;
+}
+
+.sort-arrows .arrow.active {
+  color: #7C1F89;
+  font-weight: 800;
 }
 
 .recommendation-title {

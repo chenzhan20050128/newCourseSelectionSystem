@@ -176,15 +176,39 @@
           <div v-else class="results-table">
             <div class="table-container">
               <div class="list-header sticky-header">
-                <div class="col col-info">课程信息</div>
-                <div class="col col-instructor">教师</div>
-                <div class="col col-schedule">时间 / 地点</div>
-                <div class="col col-capacity">课余量</div>
+                <div class="col col-info sortable" @click="toggleAvailableSort('courseId')">
+                  课程号
+                  <span class="sort-arrows" :class="{ active: availableSortKey === 'courseId' }">
+                    <span class="arrow up" :class="availableArrowClass('courseId', 'asc')">▲</span>
+                    <span class="arrow down" :class="availableArrowClass('courseId', 'desc')">▼</span>
+                  </span>
+                </div>
+                <div class="col col-instructor sortable" @click="toggleAvailableSort('instructorName')">
+                  教师
+                  <span class="sort-arrows" :class="{ active: availableSortKey === 'instructorName' }">
+                    <span class="arrow up" :class="availableArrowClass('instructorName', 'asc')">▲</span>
+                    <span class="arrow down" :class="availableArrowClass('instructorName', 'desc')">▼</span>
+                  </span>
+                </div>
+                <div class="col col-schedule sortable" @click="toggleAvailableSort('time')">
+                  时间 / 地点
+                  <span class="sort-arrows" :class="{ active: availableSortKey === 'time' }">
+                    <span class="arrow up" :class="availableArrowClass('time', 'asc')">▲</span>
+                    <span class="arrow down" :class="availableArrowClass('time', 'desc')">▼</span>
+                  </span>
+                </div>
+                <div class="col col-capacity sortable" @click="toggleAvailableSort('utilization')">
+                  选课人数 / 容量
+                  <span class="sort-arrows" :class="{ active: availableSortKey === 'utilization' }">
+                    <span class="arrow up" :class="availableArrowClass('utilization', 'asc')">▲</span>
+                    <span class="arrow down" :class="availableArrowClass('utilization', 'desc')">▼</span>
+                  </span>
+                </div>
                 <div class="col col-actions">操作</div>
               </div>
               <div class="course-list-body scrollable-body">
                 <CourseCard 
-                  v-for="course in availableCourses" 
+                  v-for="course in sortedAvailableCourses" 
                   :key="course.courseId" 
                   :course="course"
                   :student-id="studentId"
@@ -210,6 +234,7 @@ import { ref, computed, inject, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { dropCourse, searchCoursesBySession, enrollCourse } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
+import { sortCourses } from '../utils/courseSorter'
 
 export default {
   name: 'MyCourses',
@@ -252,6 +277,36 @@ export default {
     const queryWeekday = ref('')
     const queryPeriod = ref(null)
     const enrollingCourses = ref(new Set())
+
+    const availableSortKey = ref('')
+    const availableSortOrder = ref('asc')
+
+    const toggleAvailableSort = (key) => {
+      // none -> asc -> desc -> none
+      if (availableSortKey.value !== key) {
+        availableSortKey.value = key
+        availableSortOrder.value = 'asc'
+        return
+      }
+      if (availableSortOrder.value === 'asc') {
+        availableSortOrder.value = 'desc'
+        return
+      }
+      // desc -> none
+      availableSortKey.value = ''
+      availableSortOrder.value = 'asc'
+    }
+
+    const availableArrowClass = (key, dir) => {
+      if (availableSortKey.value !== key) return 'inactive'
+      if (availableSortOrder.value !== dir) return 'inactive'
+      return 'active'
+    }
+
+    const sortedAvailableCourses = computed(() => {
+      if (!availableSortKey.value) return availableCourses.value
+      return sortCourses(availableCourses.value, { key: availableSortKey.value, order: availableSortOrder.value })
+    })
     
     // 确认对话框状态
     const showConfirmDialog = ref(false)
@@ -819,6 +874,7 @@ export default {
       closeDialog,
       showAvailableCourses,
       availableCourses,
+      sortedAvailableCourses,
       loadingAvailableCourses,
       availableCoursesError,
       queryTimeInfo,
@@ -829,6 +885,10 @@ export default {
       hasMultipleCampuses,
       getCampusBadgeStyle,
       closeAvailableCoursesDialog,
+      toggleAvailableSort,
+      availableSortKey,
+      availableSortOrder,
+      availableArrowClass,
       handleEnrollFromDialog,
       showConfirmDialog,
       confirmDialogInfo,
@@ -877,18 +937,55 @@ export default {
 
 /* 引入首页选课页面的样式 */
 .results-card { background: white; border-radius: 12px; padding: 0; min-height: auto; box-shadow: 0 4px 20px rgba(124, 31, 137, 0.06); border: 1px solid rgba(255, 255, 255, 0.8); overflow: hidden; }
-.list-header { display: flex; background: #FAF4FC; padding: 12px 16px; color: #6a5acd; font-weight: 600; font-size: 13px; border-bottom: 1px solid #efe5f5; }
+.list-header { display: flex; background: #FAF4FC; padding: 12px 16px; color: #6a5acd; font-weight: 600; font-size: 13px; border-bottom: 1px solid #efe5f5; align-items: center; }
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-arrows {
+  margin-left: 4px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  vertical-align: middle;
+  cursor: pointer;
+  gap: 2px;
+}
+
+.sort-arrows .arrow {
+  font-size: 14px;
+  height: 12px;
+  line-height: 12px;
+}
+
+.sort-arrows .arrow.inactive {
+  color: #bfbfbf;
+}
+
+.sort-arrows .arrow.active {
+  color: #7C1F89;
+  font-weight: 800;
+}
 .course-list-body { border: none; background: #fff; }
 
 .col { 
   padding: 0 12px;
   box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
 }
-.col-info      { flex: 2.5; min-width: 200px; } 
-.col-instructor{ flex: 1;   min-width: 100px; } 
+.col-info      { flex: 2.5; min-width: 230px; } 
+.col-instructor{ flex: 1;   min-width: 110px; } 
 .col-schedule  { flex: 1.8; min-width: 180px; }
-.col-capacity  { flex: 1.2; min-width: 120px; }
-.col-actions   { flex: 0 0 100px; text-align: center; }
+.col-capacity  { flex: 1.2; min-width: 100px; }
+.col-actions   { flex: 0 0 100px; display: flex; justify-content: center; position: relative; }
+.col-actions   { flex: 100px; text-align: center; }
 
 .schedule-layout {
   display: flex;
@@ -1439,7 +1536,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1200;
   animation: fadeIn 0.3s;
 }
 
@@ -1598,6 +1695,12 @@ export default {
   background: #FAF4FC;
   border-bottom: 1px solid #efe5f5;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 12px 16px;
+  color: #6a5acd;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
 }
 
 .scrollable-body {
