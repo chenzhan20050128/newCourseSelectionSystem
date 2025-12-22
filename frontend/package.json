@@ -11,7 +11,9 @@
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.6.0",
     "element-plus": "^2.12.0",
+    "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.10.1",
+    "jspdf": "^2.5.2",
     "markdown-it": "^14.1.0",
     "vue": "^3.3.4",
     "vue-router": "^4.6.3"

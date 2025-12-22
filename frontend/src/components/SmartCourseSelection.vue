@@ -162,8 +162,10 @@
 <script setup>
 import { ref, inject, nextTick, onUnmounted, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { User, Position, ArrowRight, CopyDocument, Document, VideoPause, Plus } from '@element-plus/icons-vue'
+import { User, Position, ArrowRight, CopyDocument, Document, VideoPause } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { getCourseRecommendationStream, getCoursesByIds, enrollCourse, dropCourse, getStudentCourses } from '../api/courseApi'
 import CourseCard from './CourseCard.vue'
 import { sortCourses } from '../utils/courseSorter'
@@ -395,28 +397,33 @@ const exportToWord = (text) => {
   URL.revokeObjectURL(url)
 }
 
-const getHtml2Pdf = async () => {
-  const mod = await import('html2pdf.js')
-  return mod?.default ?? mod
-}
-
 const exportToPDF = async (text) => {
   if (!text) return
 
-  const html2pdf = await getHtml2Pdf()
+  // 关键点：html2canvas 对“被 transform 推到极远处/不可渲染”的元素容易截图为空白。
+  // 这里把导出容器挂到 DOM 上，但用 opacity:0 隐藏，确保可渲染。
   const container = document.createElement('div')
+  container.setAttribute('data-pdf-export', 'true')
   container.style.position = 'fixed'
-  // Avoid extremely large negative coordinates (can produce blank output in html2canvas)
-  container.style.left = '0'
+  // 不用 transform 推到很远处（可能导致 html2canvas 空白），改为温和的负 left 移出视口
+  container.style.left = '-10000px'
   container.style.top = '0'
-  container.style.transform = 'translateX(-200vw)'
   container.style.width = '794px' // A4 width @ 96dpi approx
   container.style.padding = '24px'
   container.style.background = '#fff'
   container.style.color = '#111'
   container.style.fontFamily = 'Arial, sans-serif'
+  container.style.lineHeight = '1.6'
+  container.style.zIndex = '0'
+  container.style.pointerEvents = 'none'
+  // 关键：opacity 必须是 1，否则 html2canvas 会按透明度渲染，最终 PDF 看起来就是空白。
+  container.style.opacity = '1'
+  container.style.visibility = 'visible'
+  container.style.transform = 'none'
+
   const rendered = renderMarkdown(text)
   container.innerHTML = rendered
+
   // If markdown renders to empty HTML (or unexpected), fallback to raw text
   if (!container.textContent || container.textContent.trim().length === 0) {
     container.innerHTML = ''
@@ -428,19 +435,93 @@ const exportToPDF = async (text) => {
     pre.textContent = text
     container.appendChild(pre)
   }
+
   document.body.appendChild(container)
 
+  // 调试输出：把中间生成的 HTML 打到控制台（避免一次性打印超大字符串）
   try {
-    await html2pdf()
-      .set({
-        margin: 10,
-        filename: 'course_recommendation.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      })
-      .from(container)
-      .save()
+    const html = container.innerHTML || ''
+    const plain = (container.textContent || '').trim()
+    window.__smartCoursePdfExport = {
+      html,
+      text: plain,
+      createdAt: new Date().toISOString(),
+      htmlLength: html.length,
+      textLength: plain.length
+    }
+
+    console.groupCollapsed('[SmartCourseSelection] PDF export debug')
+    console.log('htmlLength:', html.length)
+    console.log('textLength:', plain.length)
+    console.log('htmlPreview(0..800):', html.slice(0, 800))
+    console.log('textPreview(0..200):', plain.slice(0, 200))
+    console.log('window.__smartCoursePdfExport 里有完整 HTML')
+    console.groupEnd()
+  } catch {
+    // ignore
+  }
+
+  // 等待 2 帧，让布局/字体渲染更稳定（减少空白概率）
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+  // 等待字体加载（若浏览器支持），避免字体未就绪导致渲染异常
+  try {
+    if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+      await document.fonts.ready
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    // 直接走 html2canvas + jsPDF：你现在的预览截图是正常的，说明空白发生在 html2pdf->jsPDF 的封装阶段。
+    // 这里我们绕开 html2pdf，手动把 canvas 写入 PDF（支持自动分页）。
+    const canvas = await html2canvas(container, {
+      scale: 1.2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      windowWidth: container.scrollWidth,
+      windowHeight: container.scrollHeight
+    })
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.98)
+
+    // 调试：把预览图也存起来，便于你确认“写入 PDF 之前”图片是正常的
+    try {
+      window.__smartCoursePdfExport = {
+        ...(window.__smartCoursePdfExport || {}),
+        previewDataUrl: imgData,
+        previewCanvas: { width: canvas.width, height: canvas.height }
+      }
+    } catch {
+      // ignore
+    }
+
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 10
+    const printableWidth = pageWidth - margin * 2
+    const printableHeight = pageHeight - margin * 2
+
+    const imgWidth = printableWidth
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+    let heightLeft = imgHeight
+    let position = margin
+
+    pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight)
+    heightLeft -= printableHeight
+
+    while (heightLeft > 0) {
+      pdf.addPage()
+      position = margin - (imgHeight - heightLeft)
+      pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight)
+      heightLeft -= printableHeight
+    }
+
+    pdf.save('course_recommendation.pdf')
   } catch (err) {
     console.error(err)
     ElMessage.error('PDF 导出失败')
