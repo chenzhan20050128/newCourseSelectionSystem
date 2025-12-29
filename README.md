@@ -1,6 +1,8 @@
 ## New Course Selection System
 
-面向南京大学课程数据的选课系统，包含前端（Vue + Vite）与后端（Spring Boot + MyBatis-Plus + MySQL），并可选启用 DeepSeek API 智能选课能力。
+2025-2026学年第一学期，南京大学软件学院大三本科生专业课《人机交互系统》开发类大作业。
+
+本项目为面向南京大学课程数据的选课系统，对现有选课系统、教务系统等进行了重构、整合和人机交互上的优化。系统包含前端（Vue + Vite）与后端（Spring Boot + MyBatis-Plus + MySQL），并可选启用 DeepSeek API 智能选课能力。
 
 ## 环境要求
 - Node.js 18+，npm
@@ -25,7 +27,7 @@
 	- 如需使用 DeepSeek 智能选课，填写 `deepseek.api.key`。
 - 可选本地覆盖：`backend/src/main/resources/application-dev.properties`（已在主配置中通过 `spring.config.import` 自动加载）。
 
-## 后端启动方式
+## 后端启动方式（建议使用IDEA启动）
 - IDE：直接运行主类 `org.example.newcourseselectionsystem.NewCourseSelectionSystemApplication`。
 - Maven 命令行：
 	```bash
@@ -37,12 +39,14 @@
 	```
 
 ## 前端启动方式
+在根目录下打开
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-默认开发地址通常为 http://localhost:5173 。
+- 前端开发地址为 http://localhost:3000 。
+- 建议使用新账户进行登录，你可以在首次使用时创建一个新账户。
 
 ## 目录速览
 - backend/：Spring Boot 服务端代码与 SQL 初始化脚本
